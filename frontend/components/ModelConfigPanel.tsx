@@ -10,6 +10,7 @@ interface Props {
 }
 
 // Preset templates for common models (LiteLLM format)
+// DeepSeek pricing in CNY, others in USD
 const PRESETS: Record<string, Omit<ModelConfig, "api_key">> = {
   "deepseek-chat": {
     id: "deepseek-chat",
@@ -18,8 +19,9 @@ const PRESETS: Record<string, Omit<ModelConfig, "api_key">> = {
     api_base: "https://api.deepseek.com",
     max_tokens: 4096,
     default_temperature: 0.7,
-    cost_per_1k_input: 0.00027,
-    cost_per_1k_output: 0.0011,
+    cost_per_million_input: 2,
+    cost_per_million_output: 8,
+    currency: "CNY",
     is_active: true,
   },
   "deepseek-reasoner": {
@@ -29,8 +31,9 @@ const PRESETS: Record<string, Omit<ModelConfig, "api_key">> = {
     api_base: "https://api.deepseek.com",
     max_tokens: 8192,
     default_temperature: 0.4,
-    cost_per_1k_input: 0.00055,
-    cost_per_1k_output: 0.0022,
+    cost_per_million_input: 4,
+    cost_per_million_output: 16,
+    currency: "CNY",
     is_active: true,
   },
   "gpt-4o": {
@@ -40,8 +43,9 @@ const PRESETS: Record<string, Omit<ModelConfig, "api_key">> = {
     api_base: null,
     max_tokens: 4096,
     default_temperature: 0.7,
-    cost_per_1k_input: 0.0025,
-    cost_per_1k_output: 0.01,
+    cost_per_million_input: 2.5,
+    cost_per_million_output: 10,
+    currency: "USD",
     is_active: true,
   },
   "gpt-4o-mini": {
@@ -51,8 +55,9 @@ const PRESETS: Record<string, Omit<ModelConfig, "api_key">> = {
     api_base: null,
     max_tokens: 4096,
     default_temperature: 0.7,
-    cost_per_1k_input: 0.00015,
-    cost_per_1k_output: 0.0006,
+    cost_per_million_input: 0.15,
+    cost_per_million_output: 0.6,
+    currency: "USD",
     is_active: true,
   },
   "claude-sonnet": {
@@ -62,8 +67,9 @@ const PRESETS: Record<string, Omit<ModelConfig, "api_key">> = {
     api_base: null,
     max_tokens: 8192,
     default_temperature: 0.7,
-    cost_per_1k_input: 0.003,
-    cost_per_1k_output: 0.015,
+    cost_per_million_input: 3,
+    cost_per_million_output: 15,
+    currency: "USD",
     is_active: true,
   },
   "claude-haiku": {
@@ -73,8 +79,9 @@ const PRESETS: Record<string, Omit<ModelConfig, "api_key">> = {
     api_base: null,
     max_tokens: 4096,
     default_temperature: 0.7,
-    cost_per_1k_input: 0.0008,
-    cost_per_1k_output: 0.004,
+    cost_per_million_input: 0.8,
+    cost_per_million_output: 4,
+    currency: "USD",
     is_active: true,
   },
   "qwen-max": {
@@ -84,8 +91,9 @@ const PRESETS: Record<string, Omit<ModelConfig, "api_key">> = {
     api_base: null,
     max_tokens: 8192,
     default_temperature: 0.7,
-    cost_per_1k_input: 0.002,
-    cost_per_1k_output: 0.006,
+    cost_per_million_input: 2,
+    cost_per_million_output: 6,
+    currency: "CNY",
     is_active: true,
   },
 };
@@ -98,8 +106,9 @@ const EMPTY_MODEL: ModelConfig = {
   api_base: null,
   max_tokens: 4096,
   default_temperature: 0.7,
-  cost_per_1k_input: 0,
-  cost_per_1k_output: 0,
+  cost_per_million_input: 0,
+  cost_per_million_output: 0,
+  currency: "CNY",
   is_active: true,
 };
 
@@ -193,15 +202,34 @@ export default function ModelConfigPanel({ models, onSave, onDelete }: Props) {
                 className="w-full p-2 border rounded text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1">输入成本 ($/1K tokens)</label>
-              <input type="number" step="0.0001" min="0" value={editing.cost_per_1k_input}
-                onChange={(e) => setEditing({ ...editing, cost_per_1k_input: parseFloat(e.target.value) })}
+              <label className="block text-xs font-medium mb-1">币种</label>
+              <select value={editing.currency || "CNY"}
+                onChange={(e) => setEditing({ ...editing, currency: e.target.value })}
+                className="w-full p-2 border rounded text-sm">
+                <option value="CNY">CNY（人民币）</option>
+                <option value="USD">USD（美元）</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">默认Max Tokens</label>
+              <input type="number" step="1024" min="1024" value={editing.max_tokens}
+                onChange={(e) => setEditing({ ...editing, max_tokens: parseInt(e.target.value) })}
                 className="w-full p-2 border rounded text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1">输出成本 ($/1K tokens)</label>
-              <input type="number" step="0.0001" min="0" value={editing.cost_per_1k_output}
-                onChange={(e) => setEditing({ ...editing, cost_per_1k_output: parseFloat(e.target.value) })}
+              <label className="block text-xs font-medium mb-1">
+                输入成本（{editing.currency === "CNY" ? "¥" : "$"}/百万tokens）
+              </label>
+              <input type="number" step="0.1" min="0" value={editing.cost_per_million_input}
+                onChange={(e) => setEditing({ ...editing, cost_per_million_input: parseFloat(e.target.value) })}
+                className="w-full p-2 border rounded text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">
+                输出成本（{editing.currency === "CNY" ? "¥" : "$"}/百万tokens）
+              </label>
+              <input type="number" step="0.1" min="0" value={editing.cost_per_million_output}
+                onChange={(e) => setEditing({ ...editing, cost_per_million_output: parseFloat(e.target.value) })}
                 className="w-full p-2 border rounded text-sm" />
             </div>
           </div>

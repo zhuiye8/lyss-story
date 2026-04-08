@@ -37,8 +37,9 @@ class ModelRegistry:
                 """INSERT OR REPLACE INTO model_configs
                    (id, display_name, litellm_model, api_key, api_base,
                     max_tokens, default_temperature,
-                    cost_per_1k_input, cost_per_1k_output, is_active, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    cost_per_million_input, cost_per_million_output, currency,
+                    is_active, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     config["id"],
                     config["display_name"],
@@ -47,8 +48,9 @@ class ModelRegistry:
                     config.get("api_base"),
                     config.get("max_tokens", 4096),
                     config.get("default_temperature", 0.7),
-                    config.get("cost_per_1k_input", 0),
-                    config.get("cost_per_1k_output", 0),
+                    config.get("cost_per_million_input", 0),
+                    config.get("cost_per_million_output", 0),
+                    config.get("currency", "CNY"),
                     config.get("is_active", True),
                     config.get("created_at", now),
                 ),

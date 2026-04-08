@@ -87,7 +87,7 @@ export default function LogsPage() {
                   {(log.latency_ms / 1000).toFixed(1)}s
                 </span>
                 <span className="w-16 text-xs text-gray-400">
-                  ${log.cost_estimate.toFixed(4)}
+                  {log.cost_estimate.toFixed(4)}
                 </span>
                 {log.story_id && (
                   <span className="text-xs text-blue-500">
@@ -126,7 +126,7 @@ export default function LogsPage() {
                   </pre>
                 </div>
                 <div className="text-xs text-gray-400">
-                  Input: {detail.input_tokens} | Output: {detail.output_tokens} | Total: {detail.total_tokens} | Cost: ${detail.cost_estimate.toFixed(4)} | Latency: {detail.latency_ms}ms
+                  Input: {detail.input_tokens} | Output: {detail.output_tokens} | Total: {detail.total_tokens} | Cost: {detail.cost_estimate.toFixed(4)} | Latency: {detail.latency_ms}ms
                 </div>
               </div>
             )}

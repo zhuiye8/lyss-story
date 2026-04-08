@@ -19,8 +19,9 @@ export interface ModelConfig {
   api_base: string | null;
   max_tokens: number;
   default_temperature: number;
-  cost_per_1k_input: number;
-  cost_per_1k_output: number;
+  cost_per_million_input: number;
+  cost_per_million_output: number;
+  currency: string;
   is_active: boolean;
 }
 

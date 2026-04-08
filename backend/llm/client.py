@@ -34,16 +34,18 @@ class LLMClient:
                     "api_key": config["api_key"] or self.default_api_key,
                     "api_base": config.get("api_base") or self.default_api_base,
                     "model_config_id": config["id"],
-                    "cost_per_1k_input": config.get("cost_per_1k_input", 0),
-                    "cost_per_1k_output": config.get("cost_per_1k_output", 0),
+                    "cost_per_million_input": config.get("cost_per_million_input", 0),
+                    "cost_per_million_output": config.get("cost_per_million_output", 0),
+                    "currency": config.get("currency", "CNY"),
                 }
         return {
             "model": self.default_model,
             "api_key": self.default_api_key,
             "api_base": self.default_api_base,
             "model_config_id": "default",
-            "cost_per_1k_input": 0,
-            "cost_per_1k_output": 0,
+            "cost_per_million_input": 0,
+            "cost_per_million_output": 0,
+            "currency": "CNY",
         }
 
     async def complete(
@@ -98,11 +100,12 @@ class LLMClient:
         finally:
             latency_ms = int((time.time() - start_time) * 1000)
 
-            # Calculate cost
+            # Calculate cost (per million tokens)
             cost = (
-                input_tokens / 1000 * resolved["cost_per_1k_input"]
-                + output_tokens / 1000 * resolved["cost_per_1k_output"]
+                input_tokens / 1_000_000 * resolved["cost_per_million_input"]
+                + output_tokens / 1_000_000 * resolved["cost_per_million_output"]
             )
+            currency = resolved.get("currency", "CNY")
 
             # Log asynchronously (don't block on logging failure)
             if self.llm_logger:
@@ -127,9 +130,10 @@ class LLMClient:
                 except Exception as log_err:
                     logger.error(f"Failed to log LLM call: {log_err}")
 
+            cost_symbol = "¥" if currency == "CNY" else "$"
             logger.info(
                 f"[LLM] agent={agent_name} model={resolved['model']} "
-                f"tokens={total_tokens} latency={latency_ms}ms cost=${cost:.4f} status={status}"
+                f"tokens={total_tokens} latency={latency_ms}ms cost={cost_symbol}{cost:.4f} status={status}"
             )
 
         return content

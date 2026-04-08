@@ -11,8 +11,9 @@ class ModelConfig(BaseModel):
     api_base: str | None = None
     max_tokens: int = 4096
     default_temperature: float = 0.7
-    cost_per_1k_input: float = 0.0
-    cost_per_1k_output: float = 0.0
+    cost_per_million_input: float = 0.0
+    cost_per_million_output: float = 0.0
+    currency: str = "CNY"  # CNY / USD
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

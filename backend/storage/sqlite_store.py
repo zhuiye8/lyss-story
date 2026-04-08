@@ -46,8 +46,9 @@ class SQLiteStore:
                     api_base TEXT,
                     max_tokens INT DEFAULT 4096,
                     default_temperature REAL DEFAULT 0.7,
-                    cost_per_1k_input REAL DEFAULT 0,
-                    cost_per_1k_output REAL DEFAULT 0,
+                    cost_per_million_input REAL DEFAULT 0,
+                    cost_per_million_output REAL DEFAULT 0,
+                    currency TEXT DEFAULT 'CNY',
                     is_active BOOLEAN DEFAULT 1,
                     created_at TEXT NOT NULL
                 );

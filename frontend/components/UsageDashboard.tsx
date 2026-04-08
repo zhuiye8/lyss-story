@@ -27,8 +27,8 @@ export default function UsageDashboard({ usage }: Props) {
           <p className="text-xs text-gray-500">总Token数</p>
         </div>
         <div className="p-4 bg-amber-50 rounded-lg text-center">
-          <p className="text-2xl font-bold text-amber-700">${(total.total_cost || 0).toFixed(4)}</p>
-          <p className="text-xs text-gray-500">总成本</p>
+          <p className="text-2xl font-bold text-amber-700">{(total.total_cost || 0).toFixed(4)}</p>
+          <p className="text-xs text-gray-500">总成本（混合币种）</p>
         </div>
         <div className="p-4 bg-purple-50 rounded-lg text-center">
           <p className="text-2xl font-bold text-purple-700">{((total.avg_latency_ms || 0) / 1000).toFixed(1)}s</p>
@@ -52,7 +52,7 @@ export default function UsageDashboard({ usage }: Props) {
               </div>
             </div>
             <span className="w-20 text-xs text-gray-500 text-right">
-              {s.total_calls}次 / ${s.total_cost.toFixed(3)}
+              {s.total_calls}次 / {s.total_cost.toFixed(3)}
             </span>
           </div>
         ))}
