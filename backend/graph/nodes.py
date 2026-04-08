@@ -95,9 +95,15 @@ def create_chapter_nodes(
         world_state["time_description"] = result.get("time_description", "")
 
         updates = result.get("world_state_updates", {})
-        flags = set(world_state.get("global_flags", []))
-        flags.update(updates.get("global_flags_add", []))
-        flags -= set(updates.get("global_flags_remove", []))
+        # Ensure flags are strings (LLM may return dicts)
+        def to_str(v) -> str:
+            return v if isinstance(v, str) else str(v)
+        existing_flags = [to_str(f) for f in world_state.get("global_flags", [])]
+        add_flags = [to_str(f) for f in updates.get("global_flags_add", [])]
+        remove_flags = [to_str(f) for f in updates.get("global_flags_remove", [])]
+        flags = set(existing_flags)
+        flags.update(add_flags)
+        flags -= set(remove_flags)
         world_state["global_flags"] = list(flags)
         world_state["version"] = world_state.get("version", 0) + 1
 
