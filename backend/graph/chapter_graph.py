@@ -3,6 +3,7 @@ from langgraph.graph import END, START, StateGraph
 from backend.llm.client import LLMClient
 from backend.models.graph_state import ChapterGraphState
 from backend.graph.nodes import create_chapter_nodes
+from backend.progress import ProgressStore
 from backend.storage.json_store import JSONStore
 from backend.storage.sqlite_store import SQLiteStore
 from backend.storage.vector_store import VectorStore
@@ -21,6 +22,7 @@ def build_chapter_graph(
     sqlite: SQLiteStore,
     json_store: JSONStore,
     vector: VectorStore,
+    progress_store: ProgressStore | None = None,
 ) -> StateGraph:
     (
         load_context,
@@ -31,7 +33,7 @@ def build_chapter_graph(
         consistency_check,
         save_chapter,
         save_with_warning,
-    ) = create_chapter_nodes(llm, sqlite, json_store, vector)
+    ) = create_chapter_nodes(llm, sqlite, json_store, vector, progress_store)
 
     graph = StateGraph(ChapterGraphState)
 

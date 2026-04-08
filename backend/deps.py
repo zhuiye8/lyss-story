@@ -4,6 +4,7 @@ from backend.config import Settings
 from backend.llm.client import LLMClient
 from backend.llm.logger import LLMLogger
 from backend.llm.model_registry import ModelRegistry
+from backend.progress import ProgressStore
 from backend.storage.json_store import JSONStore
 from backend.storage.sqlite_store import SQLiteStore
 from backend.storage.vector_store import VectorStore
@@ -35,3 +36,7 @@ def get_model_registry(request: Request) -> ModelRegistry:
 
 def get_llm_logger(request: Request) -> LLMLogger:
     return request.app.state.llm_logger
+
+
+def get_progress_store(request: Request) -> ProgressStore:
+    return request.app.state.progress_store

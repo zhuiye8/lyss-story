@@ -64,3 +64,25 @@ export async function triggerGeneration(
 export async function getStatus(storyId: string): Promise<GenerationStatus> {
   return fetchJson(`${API_BASE}/stories/${storyId}/control/status`);
 }
+
+export interface StageProgress {
+  name: string;
+  label: string;
+  status: string; // pending / running / done / error
+  detail: string;
+  duration_ms: number;
+}
+
+export interface GenerationProgressData {
+  story_id: string;
+  chapter_num: number;
+  elapsed_seconds: number;
+  current_stage: string | null;
+  current_stage_label: string | null;
+  error: string | null;
+  stages: StageProgress[];
+}
+
+export async function getProgress(storyId: string): Promise<GenerationProgressData> {
+  return fetchJson(`${API_BASE}/stories/${storyId}/control/progress`);
+}

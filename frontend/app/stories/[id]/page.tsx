@@ -6,12 +6,15 @@ import StoryBibleView from "@/components/StoryBibleView";
 import ChapterList from "@/components/ChapterList";
 import GenerationStatus from "@/components/GenerationStatus";
 import ControlPanel from "@/components/ControlPanel";
+import PipelineProgress from "@/components/PipelineProgress";
 import {
   getStory,
   getStoryBible,
   listChapters,
   getStatus,
+  getProgress,
   triggerGeneration,
+  type GenerationProgressData,
 } from "@/lib/api";
 import type { StoryResponse, StoryBible, ChapterSummary } from "@/types";
 
@@ -28,6 +31,7 @@ export default function StoryDashboard({
   const [currentChapter, setCurrentChapter] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [progress, setProgress] = useState<GenerationProgressData | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -42,6 +46,25 @@ export default function StoryDashboard({
       setCurrentChapter(st.current_chapter);
       setErrorMessage(st.error_message);
 
+      // Fetch pipeline progress when generating
+      if (st.status === "generating") {
+        try {
+          const p = await getProgress(storyId);
+          setProgress(p);
+        } catch {
+          setProgress(null);
+        }
+      } else {
+        // Keep last progress visible briefly after completion
+        if (progress?.stages?.some((s) => s.status === "running")) {
+          // Still has running stages, fetch one more time
+          try {
+            const p = await getProgress(storyId);
+            setProgress(p);
+          } catch {}
+        }
+      }
+
       if (s.status !== "initializing") {
         try {
           const b = await getStoryBible(storyId);
@@ -55,12 +78,14 @@ export default function StoryDashboard({
 
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, 3000);
+    // Poll faster during generation
+    const interval = setInterval(refresh, status === "generating" ? 1500 : 3000);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [refresh, status]);
 
   const handleGenerate = async () => {
     setIsGenerating(true);
+    setProgress(null);
     try {
       await triggerGeneration(storyId);
     } catch (e) {
@@ -87,6 +112,11 @@ export default function StoryDashboard({
           currentChapter={currentChapter}
           errorMessage={errorMessage}
         />
+
+        {/* Pipeline progress visualization */}
+        {(status === "generating" || progress?.stages?.some((s) => s.status !== "pending")) && (
+          <PipelineProgress progress={progress} />
+        )}
 
         <ControlPanel
           status={status}

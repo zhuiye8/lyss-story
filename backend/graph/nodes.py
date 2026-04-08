@@ -8,6 +8,7 @@ from backend.agents.world import WorldAgent
 from backend.agents.writer import WriterAgent
 from backend.llm.client import LLMClient
 from backend.models.graph_state import ChapterGraphState, InitGraphState
+from backend.progress import ProgressStore
 from backend.storage.json_store import JSONStore
 from backend.storage.sqlite_store import SQLiteStore
 from backend.storage.vector_store import VectorStore
@@ -60,15 +61,26 @@ def create_chapter_nodes(
     sqlite: SQLiteStore,
     json_store: JSONStore,
     vector: VectorStore,
+    progress_store: ProgressStore | None = None,
 ):
     """Create node functions for the chapter generation graph."""
 
+    def _enter(story_id: str, stage: str, detail: str = ""):
+        if progress_store:
+            progress_store.enter_stage(story_id, stage, detail)
+
+    def _finish(story_id: str, stage: str, detail: str = ""):
+        if progress_store:
+            progress_store.finish_stage(story_id, stage, detail)
+
     async def load_context_node(state: ChapterGraphState) -> dict:
         story_id = state["story_id"]
+        _enter(story_id, "load_context")
         bible = json_store.load_story_bible(story_id) or state.get("story_bible", {})
         world = await sqlite.get_world_state(story_id) or state.get("world_state", {})
         events = json_store.load_event_graph(story_id)
         characters = json_store.load_characters(story_id) or state.get("character_profiles", [])
+        _finish(story_id, "load_context", f"{len(events)}个事件, {len(characters)}个角色")
         logger.info(f"[load_context] Loaded context for story {story_id}, {len(events)} events, {len(characters)} characters")
         return {
             "story_bible": bible,
@@ -78,6 +90,7 @@ def create_chapter_nodes(
         }
 
     async def world_advance_node(state: ChapterGraphState) -> dict:
+        _enter(state["story_id"], "world_advance", "调用World Agent...")
         agent = WorldAgent(llm)
         result = await agent.run(
             story_bible=state["story_bible"],
@@ -107,6 +120,7 @@ def create_chapter_nodes(
         world_state["global_flags"] = list(flags)
         world_state["version"] = world_state.get("version", 0) + 1
 
+        _finish(state["story_id"], "world_advance", f"生成{len(new_events)}个事件")
         logger.info(f"[world_advance] Generated {len(new_events)} new events, time={world_state['current_time']}")
         return {
             "new_events": new_events,
@@ -114,6 +128,7 @@ def create_chapter_nodes(
         }
 
     async def plot_plan_node(state: ChapterGraphState) -> dict:
+        _enter(state["story_id"], "plot_plan", "调用Plot Planner...")
         agent = PlotPlannerAgent(llm)
         plot = await agent.run(
             story_bible=state["story_bible"],
@@ -122,6 +137,7 @@ def create_chapter_nodes(
             event_history=state["event_history"],
             story_id=state["story_id"],
         )
+        _finish(state["story_id"], "plot_plan", plot.get("chapter_goal", "")[:30])
         logger.info(f"[plot_plan] Chapter goal: {plot.get('chapter_goal', '')[:50]}")
         return {"plot_structure": plot}
 
@@ -131,6 +147,7 @@ def create_chapter_nodes(
         chapters = await sqlite.list_chapters(story_id)
         previous_povs = [ch.get("pov", "") for ch in chapters]
 
+        _enter(state["story_id"], "camera_decide", "调用Camera Agent...")
         agent = CameraAgent(llm)
         decision = await agent.run(
             plot_structure=state["plot_structure"],
@@ -139,6 +156,7 @@ def create_chapter_nodes(
             previous_povs=previous_povs,
             story_id=state["story_id"],
         )
+        _finish(state["story_id"], "camera_decide", f"POV: {decision.get('pov_character_id')}")
         logger.info(f"[camera_decide] POV: {decision.get('pov_character_id')}, pacing: {decision.get('pacing')}")
         return {"camera_decision": decision}
 
@@ -160,6 +178,8 @@ def create_chapter_nodes(
                 for i in issues
             )
 
+        retry_num = state.get("retry_count", 0)
+        _enter(state["story_id"], "write_chapter", f"调用Writer Agent...{f'(重试#{retry_num})' if retry_num else ''}")
         agent = WriterAgent(llm)
         draft = await agent.run(
             story_bible=state["story_bible"],
@@ -171,6 +191,7 @@ def create_chapter_nodes(
             retry_feedback=retry_feedback,
             story_id=state["story_id"],
         )
+        _finish(state["story_id"], "write_chapter", f"{len(draft)}字")
         logger.info(f"[write_chapter] Generated {len(draft)} chars (retry #{state.get('retry_count', 0)})")
         return {
             "chapter_draft": draft,
@@ -178,6 +199,7 @@ def create_chapter_nodes(
         }
 
     async def consistency_check_node(state: ChapterGraphState) -> dict:
+        _enter(state["story_id"], "consistency_check", "调用Consistency Agent...")
         agent = ConsistencyAgent(llm)
         result = await agent.run(
             chapter_draft=state["chapter_draft"],
@@ -190,6 +212,7 @@ def create_chapter_nodes(
             chapter_num=state["chapter_num"],
         )
         passed = result.get("pass", False)
+        _finish(state["story_id"], "consistency_check", f"{'通过' if passed else '未通过'}, 评分{result.get('score', 0)}")
         logger.info(f"[consistency_check] Pass={passed}, score={result.get('score', 0)}")
         return {
             "consistency_result": result,
@@ -248,6 +271,8 @@ def create_chapter_nodes(
                     metadata={"character_id": cid, "chapter": state["chapter_num"]},
                 )
 
+        _enter(state["story_id"], "save_chapter")
+        _finish(state["story_id"], "save_chapter", "保存成功")
         logger.info(f"[save_chapter] Chapter {state['chapter_num']} saved successfully")
         return {"error_message": ""}
 

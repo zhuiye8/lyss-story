@@ -10,6 +10,7 @@ from backend.config import Settings
 from backend.llm.client import LLMClient
 from backend.llm.logger import LLMLogger
 from backend.llm.model_registry import ModelRegistry
+from backend.progress import ProgressStore
 from backend.storage.json_store import JSONStore
 from backend.storage.sqlite_store import SQLiteStore
 from backend.storage.vector_store import VectorStore
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI):
     app.state.vector = VectorStore(settings.chroma_path)
     app.state.model_registry = model_registry
     app.state.llm_logger = llm_logger
+    app.state.progress_store = ProgressStore()
     app.state.llm = LLMClient(settings, registry=model_registry, llm_logger=llm_logger)
 
     logging.getLogger(__name__).info(
