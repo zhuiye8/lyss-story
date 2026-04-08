@@ -40,7 +40,7 @@
 
 ## 快速开始
 
-### 1. 创建Python环境
+### 1. 创建Python环境（Miniconda）
 
 ```bash
 conda create -n story python=3.11 -y
@@ -54,31 +54,40 @@ cd C:\Files\work\story
 pip install -e ".[dev]"
 ```
 
-### 3. 配置环境变量
+### 3. 配置默认LLM（环境变量）
+
+复制模板并编辑：
 
 ```bash
 cp .env.example .env
 ```
 
-编辑 `.env` 文件，填入你的API Key：
+`.env` 文件配置一个默认模型作为保底（未在管理中心绑定的Agent会使用此模型）：
 
 ```env
-# 使用OpenAI
-STORY_LITELLM_MODEL=gpt-4o
-STORY_LITELLM_API_KEY=sk-your-key-here
+# DeepSeek（推荐，中文能力强，成本低）
+STORY_LITELLM_MODEL=deepseek/deepseek-chat
+STORY_LITELLM_API_KEY=sk-your-deepseek-key
+STORY_LITELLM_API_BASE=https://api.deepseek.com
 
-# 或使用Claude
+# 或 OpenAI
+# STORY_LITELLM_MODEL=gpt-4o
+# STORY_LITELLM_API_KEY=sk-your-key-here
+
+# 或 Claude
 # STORY_LITELLM_MODEL=claude-sonnet-4-20250514
 # STORY_LITELLM_API_KEY=sk-ant-your-key-here
 
-# 或使用通义千问
+# 或 通义千问
 # STORY_LITELLM_MODEL=qwen/qwen-max
 # STORY_LITELLM_API_KEY=sk-your-dashscope-key
 
-# 或使用本地模型（如Ollama）
+# 或 本地模型（Ollama）
 # STORY_LITELLM_MODEL=ollama/qwen2.5:14b
 # STORY_LITELLM_API_BASE=http://localhost:11434
 ```
+
+> 注：这只是保底配置。启动后可在 http://localhost:3000/admin 管理中心配置多个模型，并为每个Agent绑定不同模型。
 
 ### 4. 启动后端
 
