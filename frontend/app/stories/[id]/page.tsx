@@ -42,7 +42,7 @@ export default function StoryDashboard({
       setCurrentChapter(st.current_chapter);
       setErrorMessage(st.error_message);
 
-      if (s.status === "bible_ready" || s.status === "completed") {
+      if (s.status !== "initializing") {
         try {
           const b = await getStoryBible(storyId);
           setBible(b);
