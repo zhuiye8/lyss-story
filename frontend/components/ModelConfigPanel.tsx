@@ -9,6 +9,87 @@ interface Props {
   onDelete: (id: string) => void;
 }
 
+// Preset templates for common models (LiteLLM format)
+const PRESETS: Record<string, Omit<ModelConfig, "api_key">> = {
+  "deepseek-chat": {
+    id: "deepseek-chat",
+    display_name: "DeepSeek-V3 (Chat)",
+    litellm_model: "deepseek/deepseek-chat",
+    api_base: "https://api.deepseek.com",
+    max_tokens: 4096,
+    default_temperature: 0.7,
+    cost_per_1k_input: 0.00027,
+    cost_per_1k_output: 0.0011,
+    is_active: true,
+  },
+  "deepseek-reasoner": {
+    id: "deepseek-reasoner",
+    display_name: "DeepSeek-V3 (Reasoner)",
+    litellm_model: "deepseek/deepseek-reasoner",
+    api_base: "https://api.deepseek.com",
+    max_tokens: 8192,
+    default_temperature: 0.4,
+    cost_per_1k_input: 0.00055,
+    cost_per_1k_output: 0.0022,
+    is_active: true,
+  },
+  "gpt-4o": {
+    id: "gpt-4o",
+    display_name: "GPT-4o",
+    litellm_model: "gpt-4o",
+    api_base: null,
+    max_tokens: 4096,
+    default_temperature: 0.7,
+    cost_per_1k_input: 0.0025,
+    cost_per_1k_output: 0.01,
+    is_active: true,
+  },
+  "gpt-4o-mini": {
+    id: "gpt-4o-mini",
+    display_name: "GPT-4o Mini",
+    litellm_model: "gpt-4o-mini",
+    api_base: null,
+    max_tokens: 4096,
+    default_temperature: 0.7,
+    cost_per_1k_input: 0.00015,
+    cost_per_1k_output: 0.0006,
+    is_active: true,
+  },
+  "claude-sonnet": {
+    id: "claude-sonnet",
+    display_name: "Claude Sonnet 4",
+    litellm_model: "claude-sonnet-4-20250514",
+    api_base: null,
+    max_tokens: 8192,
+    default_temperature: 0.7,
+    cost_per_1k_input: 0.003,
+    cost_per_1k_output: 0.015,
+    is_active: true,
+  },
+  "claude-haiku": {
+    id: "claude-haiku",
+    display_name: "Claude Haiku 3.5",
+    litellm_model: "claude-3-5-haiku-20241022",
+    api_base: null,
+    max_tokens: 4096,
+    default_temperature: 0.7,
+    cost_per_1k_input: 0.0008,
+    cost_per_1k_output: 0.004,
+    is_active: true,
+  },
+  "qwen-max": {
+    id: "qwen-max",
+    display_name: "通义千问 Max",
+    litellm_model: "qwen/qwen-max",
+    api_base: null,
+    max_tokens: 8192,
+    default_temperature: 0.7,
+    cost_per_1k_input: 0.002,
+    cost_per_1k_output: 0.006,
+    is_active: true,
+  },
+};
+
 const EMPTY_MODEL: ModelConfig = {
   id: "",
   display_name: "",
@@ -35,6 +116,13 @@ export default function ModelConfigPanel({ models, onSave, onDelete }: Props) {
     }
   };
 
+  const applyPreset = (presetKey: string) => {
+    const preset = PRESETS[presetKey];
+    if (preset && editing) {
+      setEditing({ ...editing, ...preset, api_key: editing.api_key });
+    }
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
@@ -49,21 +137,44 @@ export default function ModelConfigPanel({ models, onSave, onDelete }: Props) {
 
       {showForm && editing && (
         <form onSubmit={handleSubmit} className="mb-6 p-4 border rounded-lg bg-gray-50 space-y-3">
+          {/* Preset selector */}
+          <div>
+            <label className="block text-xs font-medium mb-1">快速填充（预设模板）</label>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(PRESETS).map(([key, preset]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => applyPreset(key)}
+                  className="px-3 py-1 text-xs border rounded-full hover:bg-blue-50 hover:border-blue-300 transition"
+                >
+                  {preset.display_name}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium mb-1">ID（唯一标识）</label>
               <input value={editing.id} onChange={(e) => setEditing({ ...editing, id: e.target.value })}
-                className="w-full p-2 border rounded text-sm" placeholder="gpt-4o" />
+                className="w-full p-2 border rounded text-sm" placeholder="deepseek-chat" />
             </div>
             <div>
               <label className="block text-xs font-medium mb-1">显示名称</label>
               <input value={editing.display_name} onChange={(e) => setEditing({ ...editing, display_name: e.target.value })}
-                className="w-full p-2 border rounded text-sm" placeholder="GPT-4o" />
+                className="w-full p-2 border rounded text-sm" placeholder="DeepSeek-V3" />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1">LiteLLM模型ID</label>
+              <label className="block text-xs font-medium mb-1">
+                LiteLLM模型ID
+                <span className="ml-1 text-gray-400 font-normal">（格式: provider/model）</span>
+              </label>
               <input value={editing.litellm_model} onChange={(e) => setEditing({ ...editing, litellm_model: e.target.value })}
-                className="w-full p-2 border rounded text-sm" placeholder="gpt-4o" />
+                className="w-full p-2 border rounded text-sm" placeholder="deepseek/deepseek-chat" />
+              <p className="text-xs text-gray-400 mt-1">
+                例: deepseek/deepseek-chat, gpt-4o, claude-sonnet-4-20250514
+              </p>
             </div>
             <div>
               <label className="block text-xs font-medium mb-1">API Key</label>
@@ -73,7 +184,7 @@ export default function ModelConfigPanel({ models, onSave, onDelete }: Props) {
             <div>
               <label className="block text-xs font-medium mb-1">API Base（可选）</label>
               <input value={editing.api_base || ""} onChange={(e) => setEditing({ ...editing, api_base: e.target.value || null })}
-                className="w-full p-2 border rounded text-sm" placeholder="https://api.example.com/v1" />
+                className="w-full p-2 border rounded text-sm" placeholder="https://api.deepseek.com" />
             </div>
             <div>
               <label className="block text-xs font-medium mb-1">默认温度</label>
@@ -83,13 +194,13 @@ export default function ModelConfigPanel({ models, onSave, onDelete }: Props) {
             </div>
             <div>
               <label className="block text-xs font-medium mb-1">输入成本 ($/1K tokens)</label>
-              <input type="number" step="0.001" min="0" value={editing.cost_per_1k_input}
+              <input type="number" step="0.0001" min="0" value={editing.cost_per_1k_input}
                 onChange={(e) => setEditing({ ...editing, cost_per_1k_input: parseFloat(e.target.value) })}
                 className="w-full p-2 border rounded text-sm" />
             </div>
             <div>
               <label className="block text-xs font-medium mb-1">输出成本 ($/1K tokens)</label>
-              <input type="number" step="0.001" min="0" value={editing.cost_per_1k_output}
+              <input type="number" step="0.0001" min="0" value={editing.cost_per_1k_output}
                 onChange={(e) => setEditing({ ...editing, cost_per_1k_output: parseFloat(e.target.value) })}
                 className="w-full p-2 border rounded text-sm" />
             </div>
@@ -121,7 +232,7 @@ export default function ModelConfigPanel({ models, onSave, onDelete }: Props) {
           </div>
         ))}
         {models.length === 0 && (
-          <p className="text-gray-400 text-center py-4">暂无模型配置，请添加</p>
+          <p className="text-gray-400 text-center py-4">暂无模型配置，点击上方按钮添加，或使用预设模板快速配置</p>
         )}
       </div>
     </div>
