@@ -102,8 +102,8 @@ uvicorn backend.main:app --reload --port 8000
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 访问 http://localhost:3000
