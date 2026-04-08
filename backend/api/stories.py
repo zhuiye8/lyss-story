@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -99,6 +100,8 @@ async def _run_chapter(
 
         await sqlite.update_story(story_id, status="bible_ready")
     except Exception as e:
+        import traceback
+        logging.getLogger(__name__).error(f"Chapter generation failed for {story_id}:\n{traceback.format_exc()}")
         await sqlite.update_story(story_id, status=f"error: {str(e)[:200]}")
 
 

@@ -1,4 +1,10 @@
-from typing import TypedDict
+from typing import Annotated, TypedDict
+import operator
+
+
+def replace(a, b):
+    """Always use the new value, ignore the old."""
+    return b
 
 
 class InitGraphState(TypedDict):
@@ -14,24 +20,24 @@ class ChapterGraphState(TypedDict):
     story_id: str
     chapter_num: int
 
-    # Loaded context
-    story_bible: dict
-    world_state: dict
-    event_history: list[dict]
-    character_profiles: list[dict]
+    # Loaded context (replace on update)
+    story_bible: Annotated[dict, replace]
+    world_state: Annotated[dict, replace]
+    event_history: Annotated[list[dict], replace]
+    character_profiles: Annotated[list[dict], replace]
 
-    # Stage outputs
-    new_events: list[dict]
-    plot_structure: dict | None
-    camera_decision: dict | None
-    chapter_draft: str
-    consistency_result: dict | None
+    # Stage outputs (replace on update)
+    new_events: Annotated[list[dict], replace]
+    plot_structure: Annotated[dict | None, replace]
+    camera_decision: Annotated[dict | None, replace]
+    chapter_draft: Annotated[str, replace]
+    consistency_result: Annotated[dict | None, replace]
 
     # Control flow
-    consistency_pass: bool
-    retry_count: int
+    consistency_pass: Annotated[bool, replace]
+    retry_count: Annotated[int, replace]
     max_retries: int
-    error_message: str
+    error_message: Annotated[str, replace]
 
     # Human-in-the-loop
     human_feedback: str | None
