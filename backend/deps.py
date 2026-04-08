@@ -2,6 +2,8 @@ from fastapi import Request
 
 from backend.config import Settings
 from backend.llm.client import LLMClient
+from backend.llm.logger import LLMLogger
+from backend.llm.model_registry import ModelRegistry
 from backend.storage.json_store import JSONStore
 from backend.storage.sqlite_store import SQLiteStore
 from backend.storage.vector_store import VectorStore
@@ -25,3 +27,11 @@ def get_vector(request: Request) -> VectorStore:
 
 def get_llm(request: Request) -> LLMClient:
     return request.app.state.llm
+
+
+def get_model_registry(request: Request) -> ModelRegistry:
+    return request.app.state.model_registry
+
+
+def get_llm_logger(request: Request) -> LLMLogger:
+    return request.app.state.llm_logger

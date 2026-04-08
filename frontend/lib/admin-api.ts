@@ -1,0 +1,164 @@
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+// --- Model Config ---
+
+export interface ModelConfig {
+  id: string;
+  display_name: string;
+  litellm_model: string;
+  api_key: string;
+  api_base: string | null;
+  max_tokens: number;
+  default_temperature: number;
+  cost_per_1k_input: number;
+  cost_per_1k_output: number;
+  is_active: boolean;
+}
+
+export async function listModels(): Promise<ModelConfig[]> {
+  return fetchJson(`${API_BASE}/admin/models`);
+}
+
+export async function createModel(config: ModelConfig): Promise<void> {
+  await fetchJson(`${API_BASE}/admin/models`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+}
+
+export async function updateModel(id: string, config: ModelConfig): Promise<void> {
+  await fetchJson(`${API_BASE}/admin/models/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+}
+
+export async function deleteModel(id: string): Promise<void> {
+  await fetchJson(`${API_BASE}/admin/models/${id}`, { method: "DELETE" });
+}
+
+// --- Agent Bindings ---
+
+export interface AgentBinding {
+  agent_name: string;
+  model_config_id: string;
+  model_display_name?: string;
+  litellm_model?: string;
+  temperature_override: number | null;
+  max_tokens_override: number | null;
+}
+
+export interface BindingsResponse {
+  agents: string[];
+  bindings: AgentBinding[];
+}
+
+export async function getBindings(): Promise<BindingsResponse> {
+  return fetchJson(`${API_BASE}/admin/bindings`);
+}
+
+export async function bindAgent(
+  agentName: string,
+  modelConfigId: string,
+  temperatureOverride?: number | null,
+  maxTokensOverride?: number | null,
+): Promise<void> {
+  await fetchJson(`${API_BASE}/admin/bindings/${agentName}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model_config_id: modelConfigId,
+      temperature_override: temperatureOverride ?? null,
+      max_tokens_override: maxTokensOverride ?? null,
+    }),
+  });
+}
+
+export async function unbindAgent(agentName: string): Promise<void> {
+  await fetchJson(`${API_BASE}/admin/bindings/${agentName}`, { method: "DELETE" });
+}
+
+// --- Logs ---
+
+export interface LLMLogEntry {
+  id: number;
+  story_id: string | null;
+  chapter_num: number | null;
+  agent_name: string;
+  model_config_id: string;
+  litellm_model: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_estimate: number;
+  latency_ms: number;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface LLMLogDetail extends LLMLogEntry {
+  system_prompt: string;
+  user_prompt: string;
+  response: string;
+}
+
+export async function getLogs(params?: {
+  agent_name?: string;
+  story_id?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<LLMLogEntry[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.agent_name) searchParams.set("agent_name", params.agent_name);
+  if (params?.story_id) searchParams.set("story_id", params.story_id);
+  if (params?.limit) searchParams.set("limit", params.limit.toString());
+  if (params?.offset) searchParams.set("offset", params.offset.toString());
+  return fetchJson(`${API_BASE}/admin/logs?${searchParams}`);
+}
+
+export async function getLogDetail(logId: number): Promise<LLMLogDetail> {
+  return fetchJson(`${API_BASE}/admin/logs/${logId}`);
+}
+
+// --- Usage ---
+
+export interface UsageStatEntry {
+  group_key: string;
+  total_calls: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_tokens: number;
+  total_cost: number;
+  avg_latency_ms: number;
+}
+
+export interface UsageResponse {
+  stats: UsageStatEntry[];
+  total: {
+    total_calls: number;
+    total_input_tokens: number;
+    total_output_tokens: number;
+    total_tokens: number;
+    total_cost: number;
+    avg_latency_ms: number;
+  };
+}
+
+export async function getUsage(
+  groupBy: string = "agent",
+  days: number = 7,
+): Promise<UsageResponse> {
+  return fetchJson(`${API_BASE}/admin/usage?group_by=${groupBy}&days=${days}`);
+}

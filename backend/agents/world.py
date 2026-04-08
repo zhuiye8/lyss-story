@@ -12,6 +12,8 @@ class WorldAgent(BaseAgent):
         world_state: dict,
         event_history: list[dict],
         character_profiles: list[dict],
+        story_id: str | None = None,
+        chapter_num: int | None = None,
     ) -> dict:
         user_prompt = build_user_prompt(
             story_bible=story_bible,
@@ -22,4 +24,6 @@ class WorldAgent(BaseAgent):
         return await self._call_json(
             system_prompt=SYSTEM_PROMPT,
             user_prompt=user_prompt,
+            story_id=story_id,
+            chapter_num=chapter_num,
         )

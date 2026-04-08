@@ -106,6 +106,31 @@ npm run dev
 3. 点击"生成下一章"，观察6个Agent协作流程
 4. 在章节阅读器中查看生成的中文小说
 
+## LLM 管理中心
+
+访问 http://localhost:3000/admin 进入管理中心：
+
+### 模型配置
+- 添加多个LLM模型（支持OpenAI / Claude / Qwen / 本地模型等）
+- 配置API Key、API Base、默认温度、Token成本
+- 每个模型可单独启用/禁用
+
+### Agent-模型绑定
+- 为每个Agent（导演/世界/规划/摄影/写作/一致性检查）绑定不同模型
+- 未绑定的Agent使用环境变量中的默认模型
+- 支持按Agent覆盖温度和max_tokens
+
+### 用量监控
+- 总调用次数、Token用量、成本估算
+- 按Agent维度的用量柱状图
+- 平均延迟统计
+
+### 请求日志（/admin/logs）
+- 每次LLM调用的完整记录
+- 可查看完整的system_prompt、user_prompt、response
+- 按Agent/故事过滤
+- 显示Token数、耗时、成本、状态
+
 ## 项目结构
 
 ```
@@ -125,15 +150,21 @@ story/
 │   │   ├── json_store.py     # JSON文件（圣经/事件图）
 │   │   └── vector_store.py   # ChromaDB（角色记忆）
 │   ├── llm/
-│   │   └── client.py         # LiteLLM统一模型网关
+│   │   ├── client.py         # LiteLLM统一模型网关（per-agent模型+自动日志）
+│   │   ├── model_registry.py # 模型注册表（DB驱动的模型配置管理）
+│   │   └── logger.py         # LLM调用日志记录器
 │   └── api/                  # FastAPI路由
 │       ├── stories.py        # 故事CRUD + 生成触发
 │       ├── chapters.py       # 章节读取
-│       └── control.py        # 生成状态控制
+│       ├── control.py        # 生成状态控制
+│       └── llm_admin.py      # LLM管理中心API（模型/绑定/日志/用量）
 ├── frontend/                 # Next.js前端
-│   ├── app/                  # 3个页面
-│   ├── components/           # 6个UI组件
-│   ├── lib/api.ts            # API客户端
+│   ├── app/                  # 页面
+│   │   ├── page.tsx          # 首页
+│   │   ├── stories/          # 故事仪表盘 + 章节阅读器
+│   │   └── admin/            # LLM管理中心 + 请求日志
+│   ├── components/           # UI组件
+│   ├── lib/                  # API客户端（api.ts + admin-api.ts）
 │   └── types/index.ts        # TypeScript类型
 ├── data/                     # 运行时数据（gitignored）
 ├── pyproject.toml
@@ -154,10 +185,20 @@ story/
 | GET | /api/stories/{id}/chapters | 列出章节 |
 | GET | /api/stories/{id}/chapters/{num} | 读取章节 |
 | GET | /api/stories/{id}/control/status | 生成状态 |
+| GET | /api/admin/models | 列出模型配置 |
+| POST | /api/admin/models | 创建模型配置 |
+| PUT | /api/admin/models/{id} | 更新模型配置 |
+| DELETE | /api/admin/models/{id} | 删除模型配置 |
+| GET | /api/admin/bindings | 获取Agent-模型绑定 |
+| PUT | /api/admin/bindings/{agent} | 设置Agent绑定 |
+| GET | /api/admin/logs | 查询调用日志 |
+| GET | /api/admin/logs/{id} | 日志详情（含完整prompt） |
+| GET | /api/admin/usage | 用量统计 |
 
 ## 开发路线
 
 - [x] **P0 核心MVP** — 6个Agent线性章节生成
+- [x] **LLM管理中心** — 模型配置、Agent绑定、用量监控、请求日志
 - [ ] **P1 角色系统** — 独立角色Agent + 记忆 + 知识图谱
 - [ ] **P2 世界引擎** — 事件DAG + 并行叙事线 + Camera升级
 - [ ] **P3 微调闭环** — 角色数据提取 + LoRA训练 + 热切换

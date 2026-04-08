@@ -23,6 +23,7 @@ def create_init_nodes(llm: LLMClient):
         bible = await agent.run(
             user_theme=state["user_theme"],
             user_requirements=state["user_requirements"],
+            story_id=state["story_id"],
         )
         return {"story_bible": bible}
 
@@ -83,6 +84,8 @@ def create_chapter_nodes(
             world_state=state["world_state"],
             event_history=state["event_history"],
             character_profiles=state["character_profiles"],
+            story_id=state["story_id"],
+            chapter_num=state["chapter_num"],
         )
         new_events = result.get("new_events", [])
 
@@ -111,6 +114,7 @@ def create_chapter_nodes(
             new_events=state["new_events"],
             chapter_num=state["chapter_num"],
             event_history=state["event_history"],
+            story_id=state["story_id"],
         )
         logger.info(f"[plot_plan] Chapter goal: {plot.get('chapter_goal', '')[:50]}")
         return {"plot_structure": plot}
@@ -127,6 +131,7 @@ def create_chapter_nodes(
             character_profiles=state["character_profiles"],
             chapter_num=state["chapter_num"],
             previous_povs=previous_povs,
+            story_id=state["story_id"],
         )
         logger.info(f"[camera_decide] POV: {decision.get('pov_character_id')}, pacing: {decision.get('pacing')}")
         return {"camera_decision": decision}
@@ -158,6 +163,7 @@ def create_chapter_nodes(
             chapter_num=state["chapter_num"],
             previous_chapter_summary=prev_summary,
             retry_feedback=retry_feedback,
+            story_id=state["story_id"],
         )
         logger.info(f"[write_chapter] Generated {len(draft)} chars (retry #{state.get('retry_count', 0)})")
         return {
@@ -174,6 +180,8 @@ def create_chapter_nodes(
             character_profiles=state["character_profiles"],
             camera_decision=state["camera_decision"],
             plot_structure=state["plot_structure"],
+            story_id=state["story_id"],
+            chapter_num=state["chapter_num"],
         )
         passed = result.get("pass", False)
         logger.info(f"[consistency_check] Pass={passed}, score={result.get('score', 0)}")

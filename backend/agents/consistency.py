@@ -14,6 +14,8 @@ class ConsistencyAgent(BaseAgent):
         character_profiles: list[dict],
         camera_decision: dict,
         plot_structure: dict,
+        story_id: str | None = None,
+        chapter_num: int | None = None,
     ) -> dict:
         user_prompt = build_user_prompt(
             chapter_draft=chapter_draft,
@@ -26,5 +28,7 @@ class ConsistencyAgent(BaseAgent):
         return await self._call_json(
             system_prompt=SYSTEM_PROMPT,
             user_prompt=user_prompt,
+            story_id=story_id,
+            chapter_num=chapter_num,
             max_tokens=4096,
         )

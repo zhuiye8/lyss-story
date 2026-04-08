@@ -21,6 +21,9 @@ class BaseAgent(ABC):
         self,
         system_prompt: str,
         user_prompt: str,
+        *,
+        story_id: str | None = None,
+        chapter_num: int | None = None,
         retries: int = 2,
         temperature: float = 0.4,
         max_tokens: int = 4096,
@@ -30,6 +33,9 @@ class BaseAgent(ABC):
                 return await self.llm.complete_json(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
+                    agent_name=self.name,
+                    story_id=story_id,
+                    chapter_num=chapter_num,
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
@@ -44,12 +50,18 @@ class BaseAgent(ABC):
         self,
         system_prompt: str,
         user_prompt: str,
+        *,
+        story_id: str | None = None,
+        chapter_num: int | None = None,
         temperature: float = 0.7,
         max_tokens: int = 8192,
     ) -> str:
         return await self.llm.complete(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
+            agent_name=self.name,
+            story_id=story_id,
+            chapter_num=chapter_num,
             temperature=temperature,
             max_tokens=max_tokens,
         )

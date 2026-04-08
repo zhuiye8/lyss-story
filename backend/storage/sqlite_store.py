@@ -38,6 +38,48 @@ class SQLiteStore:
                     PRIMARY KEY (story_id, chapter_num),
                     FOREIGN KEY (story_id) REFERENCES stories(id)
                 );
+                CREATE TABLE IF NOT EXISTS model_configs (
+                    id TEXT PRIMARY KEY,
+                    display_name TEXT NOT NULL,
+                    litellm_model TEXT NOT NULL,
+                    api_key TEXT NOT NULL DEFAULT '',
+                    api_base TEXT,
+                    max_tokens INT DEFAULT 4096,
+                    default_temperature REAL DEFAULT 0.7,
+                    cost_per_1k_input REAL DEFAULT 0,
+                    cost_per_1k_output REAL DEFAULT 0,
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS agent_model_bindings (
+                    agent_name TEXT PRIMARY KEY,
+                    model_config_id TEXT NOT NULL,
+                    temperature_override REAL,
+                    max_tokens_override INT,
+                    FOREIGN KEY (model_config_id) REFERENCES model_configs(id)
+                );
+                CREATE TABLE IF NOT EXISTS llm_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    story_id TEXT,
+                    chapter_num INT,
+                    agent_name TEXT NOT NULL,
+                    model_config_id TEXT NOT NULL DEFAULT '',
+                    litellm_model TEXT NOT NULL,
+                    system_prompt TEXT,
+                    user_prompt TEXT,
+                    response TEXT,
+                    input_tokens INT DEFAULT 0,
+                    output_tokens INT DEFAULT 0,
+                    total_tokens INT DEFAULT 0,
+                    cost_estimate REAL DEFAULT 0,
+                    latency_ms INT DEFAULT 0,
+                    status TEXT DEFAULT 'success',
+                    error_message TEXT,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_llm_logs_agent ON llm_logs(agent_name);
+                CREATE INDEX IF NOT EXISTS idx_llm_logs_story ON llm_logs(story_id);
+                CREATE INDEX IF NOT EXISTS idx_llm_logs_created ON llm_logs(created_at);
             """)
 
     async def create_story(self, story_id: str, title: str, theme: str) -> None:

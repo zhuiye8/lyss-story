@@ -27,7 +27,19 @@ export default function RootLayout({
       lang="zh-CN"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <nav className="border-b bg-white">
+          <div className="max-w-6xl mx-auto px-8 py-3 flex items-center justify-between">
+            <a href="/" className="font-bold text-lg">Story Engine</a>
+            <div className="flex gap-4 text-sm">
+              <a href="/" className="text-gray-600 hover:text-black">首页</a>
+              <a href="/admin" className="text-gray-600 hover:text-black">管理中心</a>
+              <a href="/admin/logs" className="text-gray-600 hover:text-black">请求日志</a>
+            </div>
+          </div>
+        </nav>
+        {children}
+      </body>
     </html>
   );
 }

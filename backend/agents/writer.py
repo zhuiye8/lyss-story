@@ -15,6 +15,7 @@ class WriterAgent(BaseAgent):
         chapter_num: int,
         previous_chapter_summary: str = "",
         retry_feedback: str = "",
+        story_id: str | None = None,
     ) -> str:
         user_prompt = build_user_prompt(
             story_bible=story_bible,
@@ -28,6 +29,8 @@ class WriterAgent(BaseAgent):
         return await self._call_text(
             system_prompt=SYSTEM_PROMPT,
             user_prompt=user_prompt,
+            story_id=story_id,
+            chapter_num=chapter_num,
             temperature=0.8,
             max_tokens=8192,
         )
