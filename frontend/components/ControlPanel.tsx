@@ -11,7 +11,7 @@ export default function ControlPanel({
   onGenerateNext,
   isLoading,
 }: Props) {
-  const canGenerate = status === "bible_ready" || status === "completed";
+  const canGenerate = status === "bible_ready" || status === "completed" || status === "error";
 
   return (
     <div className="flex gap-3">

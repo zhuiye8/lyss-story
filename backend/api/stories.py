@@ -174,7 +174,8 @@ async def generate_chapter(
     story = await sqlite.get_story(story_id)
     if not story:
         raise HTTPException(404, "Story not found")
-    if story["status"] not in ("bible_ready", "completed"):
+    # Allow retry from error state
+    if story["status"] not in ("bible_ready", "completed") and not story["status"].startswith("error"):
         raise HTTPException(400, f"Story is in state '{story['status']}', cannot generate")
 
     chapter_num = await sqlite.get_chapter_count(story_id) + 1
