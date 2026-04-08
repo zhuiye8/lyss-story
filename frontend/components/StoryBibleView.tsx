@@ -68,7 +68,7 @@ export default function StoryBibleView({ bible }: Props) {
               <h4 className="font-medium mb-1">初始冲突</h4>
               <ul className="list-disc pl-5">
                 {bible.initial_conflicts.map((c, i) => (
-                  <li key={i}>{c}</li>
+                  <li key={i}>{typeof c === "string" ? c : (c as { description?: string }).description || JSON.stringify(c)}</li>
                 ))}
               </ul>
             </div>
@@ -82,7 +82,7 @@ export default function StoryBibleView({ bible }: Props) {
           {bible.taboos?.length > 0 && (
             <div>
               <h4 className="font-medium mb-1">禁忌</h4>
-              <p className="text-red-600">{bible.taboos.join("、")}</p>
+              <p className="text-red-600">{bible.taboos.map((t) => typeof t === "string" ? t : (t as { description?: string }).description || JSON.stringify(t)).join("、")}</p>
             </div>
           )}
         </div>
