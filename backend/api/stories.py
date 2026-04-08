@@ -105,10 +105,13 @@ async def _run_chapter(
         await sqlite.update_story(story_id, status="bible_ready")
     except Exception as e:
         import traceback
-        logging.getLogger(__name__).error(f"Chapter generation failed for {story_id}:\n{traceback.format_exc()}")
+        tb = traceback.format_exc()
+        logging.getLogger(__name__).error(f"Chapter generation failed for {story_id}:\n{tb}")
         if progress_store:
             progress_store.set_error(story_id, str(e)[:200])
-        await sqlite.update_story(story_id, status=f"error: {str(e)[:200]}")
+        # Store full traceback in status for debugging (truncated)
+        error_detail = f"{str(e)[:100]} | {tb[-300:]}"
+        await sqlite.update_story(story_id, status=f"error: {error_detail[:400]}")
 
 
 @router.post("", response_model=StoryResponse)
