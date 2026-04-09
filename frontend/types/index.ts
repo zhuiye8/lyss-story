@@ -4,6 +4,7 @@ export interface StoryResponse {
   theme: string;
   status: string;
   chapter_count: number;
+  is_published?: boolean;
 }
 
 export interface StoryBible {
@@ -39,6 +40,7 @@ export interface ChapterSummary {
   pov: string;
   word_count: number;
   has_warnings: boolean;
+  is_published?: boolean;
 }
 
 export interface ChapterDetail extends ChapterSummary {

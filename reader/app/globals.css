@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap');
+
+body {
+  font-family: "Noto Serif SC", "Source Han Serif SC", "STSong", serif;
+}
+
+/* Reading prose styles */
+.prose-reader {
+  font-size: 1.125rem;
+  line-height: 2;
+  color: #d4d4d8;
+}
+
+.prose-reader p {
+  text-indent: 2em;
+  margin-bottom: 1em;
+  text-align: justify;
+}
+
+.prose-reader hr {
+  border: none;
+  text-align: center;
+  margin: 2em 0;
+}
+
+.prose-reader hr::before {
+  content: "* * *";
+  color: #52525b;
+  letter-spacing: 1em;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 3px;
+}

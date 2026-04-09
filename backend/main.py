@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import chapters, control, llm_admin, stories
+from backend.api import chapters, control, llm_admin, public, stories
 from backend.config import Settings
 from backend.llm.client import LLMClient
 from backend.llm.logger import LLMLogger
@@ -66,7 +66,7 @@ app = FastAPI(title="Story Engine", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:4000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,6 +76,7 @@ app.include_router(stories.router, prefix="/api/stories", tags=["stories"])
 app.include_router(chapters.router, prefix="/api/stories/{story_id}/chapters", tags=["chapters"])
 app.include_router(control.router, prefix="/api/stories/{story_id}/control", tags=["control"])
 app.include_router(llm_admin.router, prefix="/api/admin", tags=["admin"])
+app.include_router(public.router, prefix="/api/public", tags=["public"])
 
 
 @app.get("/api/health")

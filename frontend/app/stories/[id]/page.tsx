@@ -14,6 +14,8 @@ import {
   getStatus,
   getProgress,
   triggerGeneration,
+  publishStory,
+  publishChapter,
   type GenerationProgressData,
 } from "@/lib/api";
 import type { StoryResponse, StoryBible, ChapterSummary } from "@/types";
@@ -101,9 +103,26 @@ export default function StoryDashboard({
         &larr; 返回首页
       </Link>
 
-      <h1 className="text-2xl font-bold mb-2">
-        {story?.title || "加载中..."}
-      </h1>
+      <div className="flex items-center gap-3 mb-2">
+        <h1 className="text-2xl font-bold">
+          {story?.title || "加载中..."}
+        </h1>
+        {story && (
+          <button
+            onClick={async () => {
+              await publishStory(storyId, !story.is_published);
+              refresh();
+            }}
+            className={`px-3 py-1 text-xs rounded-full border transition ${
+              story.is_published
+                ? "bg-green-100 text-green-700 border-green-300"
+                : "bg-gray-100 text-gray-500 border-gray-300 hover:bg-green-50"
+            }`}
+          >
+            {story.is_published ? "已发布" : "发布小说"}
+          </button>
+        )}
+      </div>
       <p className="text-gray-500 mb-6 text-sm">{story?.theme}</p>
 
       <div className="space-y-6">
@@ -130,7 +149,14 @@ export default function StoryDashboard({
           <h2 className="text-lg font-semibold mb-3">
             章节列表（{chapters.length}章）
           </h2>
-          <ChapterList storyId={storyId} chapters={chapters} />
+          <ChapterList
+            storyId={storyId}
+            chapters={chapters}
+            onPublishChapter={async (num, pub) => {
+              await publishChapter(storyId, num, pub);
+              refresh();
+            }}
+          />
         </div>
       </div>
     </main>

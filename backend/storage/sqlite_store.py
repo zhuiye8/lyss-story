@@ -16,6 +16,7 @@ class SQLiteStore:
                     title TEXT NOT NULL DEFAULT '',
                     theme TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'initializing',
+                    is_published BOOLEAN NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -34,6 +35,7 @@ class SQLiteStore:
                     content TEXT NOT NULL,
                     events_json TEXT NOT NULL DEFAULT '[]',
                     metadata_json TEXT NOT NULL DEFAULT '{}',
+                    is_published BOOLEAN NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     PRIMARY KEY (story_id, chapter_num),
                     FOREIGN KEY (story_id) REFERENCES stories(id)
@@ -107,6 +109,12 @@ class SQLiteStore:
                     PRIMARY KEY (story_id, character_id, chapter_num)
                 );
             """)
+            # Migrate existing tables: add is_published if missing
+            for table, col in [("stories", "is_published"), ("chapters", "is_published")]:
+                try:
+                    await db.execute(f"ALTER TABLE {table} ADD COLUMN {col} BOOLEAN NOT NULL DEFAULT 0")
+                except Exception:
+                    pass  # Column already exists
 
     async def create_story(self, story_id: str, title: str, theme: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
@@ -208,7 +216,7 @@ class SQLiteStore:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
-                "SELECT story_id, chapter_num, title, pov, length(content) as word_count, metadata_json, created_at FROM chapters WHERE story_id = ? ORDER BY chapter_num",
+                "SELECT story_id, chapter_num, title, pov, length(content) as word_count, is_published, metadata_json, created_at FROM chapters WHERE story_id = ? ORDER BY chapter_num",
                 (story_id,),
             )
             rows = await cursor.fetchall()
@@ -227,3 +235,65 @@ class SQLiteStore:
             )
             row = await cursor.fetchone()
             return row[0] if row else 0
+
+    # --- Publish methods ---
+
+    async def publish_story(self, story_id: str, publish: bool) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE stories SET is_published = ?, updated_at = ? WHERE id = ?",
+                (1 if publish else 0, now, story_id),
+            )
+            await db.commit()
+
+    async def publish_chapter(self, story_id: str, chapter_num: int, publish: bool) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE chapters SET is_published = ? WHERE story_id = ? AND chapter_num = ?",
+                (1 if publish else 0, story_id, chapter_num),
+            )
+            await db.commit()
+
+    async def list_published_stories(self) -> list[dict]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM stories WHERE is_published = 1 ORDER BY updated_at DESC"
+            )
+            rows = [dict(row) for row in await cursor.fetchall()]
+            for r in rows:
+                cursor2 = await db.execute(
+                    "SELECT COUNT(*) FROM chapters WHERE story_id = ? AND is_published = 1",
+                    (r["id"],),
+                )
+                count_row = await cursor2.fetchone()
+                r["published_chapter_count"] = count_row[0] if count_row else 0
+            return rows
+
+    async def list_published_chapters(self, story_id: str) -> list[dict]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT story_id, chapter_num, title, pov, length(content) as word_count, created_at
+                   FROM chapters WHERE story_id = ? AND is_published = 1
+                   ORDER BY chapter_num""",
+                (story_id,),
+            )
+            return [dict(row) for row in await cursor.fetchall()]
+
+    async def get_published_chapter(self, story_id: str, chapter_num: int) -> dict | None:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT * FROM chapters
+                   WHERE story_id = ? AND chapter_num = ? AND is_published = 1""",
+                (story_id, chapter_num),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            d["events_covered"] = json.loads(d.pop("events_json"))
+            d["metadata"] = json.loads(d.pop("metadata_json"))
+            return d

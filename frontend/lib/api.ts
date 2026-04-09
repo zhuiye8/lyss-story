@@ -65,6 +65,29 @@ export async function getStatus(storyId: string): Promise<GenerationStatus> {
   return fetchJson(`${API_BASE}/stories/${storyId}/control/status`);
 }
 
+export async function publishStory(
+  storyId: string,
+  publish: boolean
+): Promise<void> {
+  await fetchJson(`${API_BASE}/stories/${storyId}/publish`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ publish }),
+  });
+}
+
+export async function publishChapter(
+  storyId: string,
+  chapterNum: number,
+  publish: boolean
+): Promise<void> {
+  await fetchJson(`${API_BASE}/stories/${storyId}/chapters/${chapterNum}/publish`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ publish }),
+  });
+}
+
 export interface StageProgress {
   name: string;
   label: string;

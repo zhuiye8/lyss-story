@@ -33,6 +33,7 @@ class StoryResponse(BaseModel):
     theme: str
     status: str
     chapter_count: int = 0
+    is_published: bool = False
 
 
 async def _run_init(
@@ -157,6 +158,7 @@ async def list_stories(sqlite: SQLiteStore = Depends(get_sqlite)):
             theme=r["theme"],
             status=r["status"],
             chapter_count=count,
+            is_published=bool(r.get("is_published", 0)),
         ))
     return result
 
@@ -173,6 +175,7 @@ async def get_story(story_id: str, sqlite: SQLiteStore = Depends(get_sqlite)):
         theme=row["theme"],
         status=row["status"],
         chapter_count=count,
+        is_published=bool(row.get("is_published", 0)),
     )
 
 
@@ -182,6 +185,20 @@ async def get_bible(story_id: str, json_store: JSONStore = Depends(get_json_stor
     if not bible:
         raise HTTPException(404, "Story Bible not found")
     return bible
+
+
+@router.put("/{story_id}/publish")
+async def publish_story(
+    story_id: str,
+    req: dict,
+    sqlite: SQLiteStore = Depends(get_sqlite),
+):
+    story = await sqlite.get_story(story_id)
+    if not story:
+        raise HTTPException(404, "Story not found")
+    publish = bool(req.get("publish", False))
+    await sqlite.publish_story(story_id, publish)
+    return {"message": f"Story {'published' if publish else 'unpublished'}", "is_published": publish}
 
 
 @router.post("/{story_id}/generate")
