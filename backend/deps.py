@@ -4,6 +4,8 @@ from backend.config import Settings
 from backend.llm.client import LLMClient
 from backend.llm.logger import LLMLogger
 from backend.llm.model_registry import ModelRegistry
+from backend.memory.chapter_extractor import ChapterExtractor
+from backend.memory.layered_memory import LayeredMemory
 from backend.progress import ProgressStore
 from backend.storage.json_store import JSONStore
 from backend.storage.sqlite_store import SQLiteStore
@@ -40,3 +42,11 @@ def get_llm_logger(request: Request) -> LLMLogger:
 
 def get_progress_store(request: Request) -> ProgressStore:
     return request.app.state.progress_store
+
+
+def get_layered_memory(request: Request) -> LayeredMemory:
+    return request.app.state.layered_memory
+
+
+def get_chapter_extractor(request: Request) -> ChapterExtractor:
+    return request.app.state.chapter_extractor

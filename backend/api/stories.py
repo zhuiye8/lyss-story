@@ -5,7 +5,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
 from backend.config import Settings
-from backend.deps import get_json_store, get_llm, get_progress_store, get_settings, get_sqlite, get_vector
+from backend.deps import (
+    get_chapter_extractor, get_json_store, get_layered_memory, get_llm,
+    get_progress_store, get_settings, get_sqlite, get_vector,
+)
+from backend.memory.chapter_extractor import ChapterExtractor
+from backend.memory.layered_memory import LayeredMemory
 from backend.progress import ProgressStore
 from backend.graph.chapter_graph import build_chapter_graph
 from backend.graph.init_graph import build_init_graph
@@ -74,13 +79,18 @@ async def _run_chapter(
     json_store: JSONStore,
     vector: VectorStore,
     progress_store: ProgressStore | None = None,
+    layered_memory: LayeredMemory | None = None,
+    chapter_extractor: ChapterExtractor | None = None,
 ):
     """Background task: generate one chapter."""
     if progress_store:
         progress_store.start(story_id, chapter_num)
     try:
         await sqlite.update_story(story_id, status="generating")
-        graph = build_chapter_graph(llm, sqlite, json_store, vector, progress_store)
+        graph = build_chapter_graph(
+            llm, sqlite, json_store, vector,
+            progress_store, layered_memory, chapter_extractor,
+        )
         compiled = graph.compile()
 
         await compiled.ainvoke({
@@ -98,6 +108,7 @@ async def _run_chapter(
             "consistency_pass": False,
             "retry_count": 0,
             "max_retries": settings.max_consistency_retries,
+            "memory_contexts": {},
             "error_message": "",
             "human_feedback": None,
         })
@@ -183,6 +194,8 @@ async def generate_chapter(
     json_store: JSONStore = Depends(get_json_store),
     vector: VectorStore = Depends(get_vector),
     progress_store: ProgressStore = Depends(get_progress_store),
+    layered_memory: LayeredMemory = Depends(get_layered_memory),
+    chapter_extractor: ChapterExtractor = Depends(get_chapter_extractor),
 ):
     story = await sqlite.get_story(story_id)
     if not story:
@@ -193,6 +206,7 @@ async def generate_chapter(
 
     chapter_num = await sqlite.get_chapter_count(story_id) + 1
     background.add_task(
-        _run_chapter, story_id, chapter_num, llm, settings, sqlite, json_store, vector, progress_store
+        _run_chapter, story_id, chapter_num, llm, settings, sqlite, json_store, vector,
+        progress_store, layered_memory, chapter_extractor,
     )
     return {"message": f"Generating chapter {chapter_num}", "chapter_num": chapter_num}

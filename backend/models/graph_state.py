@@ -33,6 +33,9 @@ class ChapterGraphState(TypedDict):
     chapter_draft: Annotated[str, replace]
     consistency_result: Annotated[dict | None, replace]
 
+    # Memory context (loaded before writing)
+    memory_contexts: Annotated[dict, replace]  # {character_id: CharacterMemoryContext.to_prompt_text()}
+
     # Control flow
     consistency_pass: Annotated[bool, replace]
     retry_count: Annotated[int, replace]

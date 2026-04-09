@@ -46,8 +46,9 @@ def build_user_prompt(
     character_profiles: list[dict],
     camera_decision: dict,
     plot_structure: dict,
+    memory_contexts: dict | None = None,
 ) -> str:
-    return f"""## 待审查章节草稿
+    prompt = f"""## 待审查章节草稿
 
 {chapter_draft}
 
@@ -69,5 +70,15 @@ def build_user_prompt(
 - POV角色：{camera_decision.get('pov_character_id', '')}
 - 可见事件：{json.dumps(camera_decision.get('visible_events', []), ensure_ascii=False)}
 - 隐藏事件：{json.dumps(camera_decision.get('hidden_events', []), ensure_ascii=False)}
+"""
 
-请进行全面的一致性审查。"""
+    # Inject relationship history from knowledge graph
+    if memory_contexts:
+        pov_id = camera_decision.get('pov_character_id', '')
+        pov_memory = memory_contexts.get(pov_id, "")
+        if pov_memory:
+            prompt += f"\n### POV角色记忆与关系历史\n{pov_memory}\n"
+            prompt += "\n请特别检查：章节内容是否与POV角色的已知记忆和关系状态矛盾。\n"
+
+    prompt += "\n请进行全面的一致性审查。"
+    return prompt

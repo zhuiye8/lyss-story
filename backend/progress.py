@@ -50,9 +50,11 @@ CHAPTER_STAGES = [
     ("world_advance", "推进世界"),
     ("plot_plan", "规划剧情"),
     ("camera_decide", "选择视角"),
+    ("load_memories", "加载记忆"),
     ("write_chapter", "撰写正文"),
     ("consistency_check", "一致性检查"),
     ("save_chapter", "保存章节"),
+    ("extract_memories", "提取记忆"),
 ]
 
 

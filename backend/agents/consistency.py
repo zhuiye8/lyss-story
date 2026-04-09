@@ -14,6 +14,7 @@ class ConsistencyAgent(BaseAgent):
         character_profiles: list[dict],
         camera_decision: dict,
         plot_structure: dict,
+        memory_contexts: dict | None = None,
         story_id: str | None = None,
         chapter_num: int | None = None,
     ) -> dict:
@@ -24,6 +25,7 @@ class ConsistencyAgent(BaseAgent):
             character_profiles=character_profiles,
             camera_decision=camera_decision,
             plot_structure=plot_structure,
+            memory_contexts=memory_contexts,
         )
         return await self._call_json(
             system_prompt=SYSTEM_PROMPT,

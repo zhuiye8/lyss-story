@@ -10,6 +10,9 @@ from backend.config import Settings
 from backend.llm.client import LLMClient
 from backend.llm.logger import LLMLogger
 from backend.llm.model_registry import ModelRegistry
+from backend.memory.chapter_extractor import ChapterExtractor
+from backend.memory.knowledge_graph import KnowledgeGraph
+from backend.memory.layered_memory import LayeredMemory
 from backend.progress import ProgressStore
 from backend.storage.json_store import JSONStore
 from backend.storage.sqlite_store import SQLiteStore
@@ -30,22 +33,31 @@ async def lifespan(app: FastAPI):
     # Initialize stores
     sqlite = SQLiteStore(settings.sqlite_path)
     await sqlite.initialize()
+    vector = VectorStore(settings.chroma_path)
 
     # Initialize LLM management
     model_registry = ModelRegistry(settings.sqlite_path)
     llm_logger = LLMLogger(settings.sqlite_path)
+    llm = LLMClient(settings, registry=model_registry, llm_logger=llm_logger)
+
+    # Initialize memory system
+    knowledge_graph = KnowledgeGraph(settings.sqlite_path)
+    layered_memory = LayeredMemory(vector, knowledge_graph)
+    chapter_extractor = ChapterExtractor(llm, vector, knowledge_graph, settings.sqlite_path)
 
     app.state.settings = settings
     app.state.sqlite = sqlite
     app.state.json_store = JSONStore(settings.data_dir)
-    app.state.vector = VectorStore(settings.chroma_path)
+    app.state.vector = vector
     app.state.model_registry = model_registry
     app.state.llm_logger = llm_logger
     app.state.progress_store = ProgressStore()
-    app.state.llm = LLMClient(settings, registry=model_registry, llm_logger=llm_logger)
+    app.state.llm = llm
+    app.state.layered_memory = layered_memory
+    app.state.chapter_extractor = chapter_extractor
 
     logging.getLogger(__name__).info(
-        f"Story Engine started. Default model: {settings.litellm_model}"
+        f"Story Engine started. Default model: {settings.litellm_model} | Memory system: enabled"
     )
     yield
 

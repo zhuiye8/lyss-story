@@ -25,6 +25,7 @@ def build_user_prompt(
     chapter_num: int,
     previous_chapter_summary: str = "",
     retry_feedback: str = "",
+    memory_contexts: dict | None = None,
 ) -> str:
     # Find POV character details
     pov_id = camera_decision.get("pov_character_id", "")
@@ -64,11 +65,17 @@ POV角色：{pov_char.get('name', '未知')}（{camera_decision.get('pov_type', 
 {json.dumps([{'name': c.get('name'), 'personality': c.get('personality'), 'goals': c.get('goals', [])} for c in character_profiles], ensure_ascii=False, indent=2)}
 """
 
+    # Inject character memory context (from layered memory system)
+    if memory_contexts:
+        pov_memory = memory_contexts.get(pov_id, "")
+        if pov_memory:
+            prompt += f"\n## POV角色记忆（{pov_char.get('name', 'POV')}的视角和记忆）\n{pov_memory}\n"
+
     if previous_chapter_summary:
         prompt += f"\n## 上一章摘要\n{previous_chapter_summary}\n"
 
     if retry_feedback:
         prompt += f"\n## 修改要求\n上一稿存在以下问题，请修正：\n{retry_feedback}\n"
 
-    prompt += "\n请开始创作本章正文。"
+    prompt += "\n请开始创作本章正文。注意：POV角色只能感知到自己经历和知道的事情，不要写出该角色不可能知道的信息。"
     return prompt

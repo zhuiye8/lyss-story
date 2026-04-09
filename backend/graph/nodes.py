@@ -7,6 +7,8 @@ from backend.agents.planner import PlotPlannerAgent
 from backend.agents.world import WorldAgent
 from backend.agents.writer import WriterAgent
 from backend.llm.client import LLMClient
+from backend.memory.chapter_extractor import ChapterExtractor
+from backend.memory.layered_memory import LayeredMemory
 from backend.models.graph_state import ChapterGraphState, InitGraphState
 from backend.progress import ProgressStore
 from backend.storage.json_store import JSONStore
@@ -62,6 +64,8 @@ def create_chapter_nodes(
     json_store: JSONStore,
     vector: VectorStore,
     progress_store: ProgressStore | None = None,
+    layered_memory: LayeredMemory | None = None,
+    chapter_extractor: ChapterExtractor | None = None,
 ):
     """Create node functions for the chapter generation graph."""
 
@@ -160,6 +164,38 @@ def create_chapter_nodes(
         logger.info(f"[camera_decide] POV: {decision.get('pov_character_id')}, pacing: {decision.get('pacing')}")
         return {"camera_decision": decision}
 
+    async def load_memories_node(state: ChapterGraphState) -> dict:
+        story_id = state["story_id"]
+        _enter(story_id, "load_memories", "加载角色记忆...")
+        memory_contexts: dict = {}
+
+        if layered_memory:
+            pov_id = state["camera_decision"].get("pov_character_id", "") if state.get("camera_decision") else ""
+            scene_query = state["plot_structure"].get("chapter_goal", "") if state.get("plot_structure") else ""
+
+            # Load memory for POV character (most detailed)
+            if pov_id:
+                ctx = await layered_memory.build_context(
+                    story_id, pov_id, state["character_profiles"],
+                    state["chapter_num"], scene_query=scene_query,
+                )
+                memory_contexts[pov_id] = ctx.to_prompt_text()
+
+            # Load L0 identity for other active characters
+            for c in state["character_profiles"]:
+                cid = c.get("character_id", "")
+                if cid and cid != pov_id:
+                    ctx = await layered_memory.build_context(
+                        story_id, cid, state["character_profiles"],
+                        state["chapter_num"],
+                    )
+                    memory_contexts[cid] = ctx.identity_core  # Only L0 for non-POV
+
+        total_chars = sum(len(v) for v in memory_contexts.values())
+        _finish(story_id, "load_memories", f"{len(memory_contexts)}个角色, ~{int(total_chars/1.5)}tok")
+        logger.info(f"[load_memories] Loaded memory for {len(memory_contexts)} characters, ~{total_chars} chars")
+        return {"memory_contexts": memory_contexts}
+
     async def write_chapter_node(state: ChapterGraphState) -> dict:
         # Get previous chapter summary for continuity
         prev_summary = ""
@@ -189,6 +225,7 @@ def create_chapter_nodes(
             chapter_num=state["chapter_num"],
             previous_chapter_summary=prev_summary,
             retry_feedback=retry_feedback,
+            memory_contexts=state.get("memory_contexts"),
             story_id=state["story_id"],
         )
         _finish(state["story_id"], "write_chapter", f"{len(draft)}字")
@@ -208,6 +245,7 @@ def create_chapter_nodes(
             character_profiles=state["character_profiles"],
             camera_decision=state["camera_decision"],
             plot_structure=state["plot_structure"],
+            memory_contexts=state.get("memory_contexts"),
             story_id=state["story_id"],
             chapter_num=state["chapter_num"],
         )
@@ -259,18 +297,6 @@ def create_chapter_nodes(
         # Append new events to event graph
         json_store.append_events(story_id, state["new_events"])
 
-        # Save character memory to vector store
-        for c in state["character_profiles"]:
-            cid = c.get("character_id", "")
-            if cid:
-                memory_text = f"第{state['chapter_num']}章：{state['plot_structure'].get('chapter_goal', '')}"
-                vector.add_memory(
-                    story_id=story_id,
-                    memory_id=f"ch{state['chapter_num']}_{cid}",
-                    text=memory_text,
-                    metadata={"character_id": cid, "chapter": state["chapter_num"]},
-                )
-
         _enter(state["story_id"], "save_chapter")
         _finish(state["story_id"], "save_chapter", "保存成功")
         logger.info(f"[save_chapter] Chapter {state['chapter_num']} saved successfully")
@@ -318,13 +344,38 @@ def create_chapter_nodes(
         logger.warning(f"[save_with_warning] Chapter {state['chapter_num']} saved with {len(warnings)} warnings after max retries")
         return {"error_message": f"章节已保存，但存在{len(warnings)}个一致性警告"}
 
+    async def extract_memories_node(state: ChapterGraphState) -> dict:
+        story_id = state["story_id"]
+        _enter(story_id, "extract_memories", "提取角色记忆...")
+
+        if chapter_extractor and state.get("chapter_draft"):
+            try:
+                result = await chapter_extractor.extract_and_save(
+                    story_id=story_id,
+                    chapter_num=state["chapter_num"],
+                    chapter_content=state["chapter_draft"],
+                    character_profiles=state["character_profiles"],
+                    camera_decision=state.get("camera_decision", {}),
+                )
+                detail = f"{len(result.character_memories)}条记忆, {len(result.relationship_changes)}条关系"
+                _finish(story_id, "extract_memories", detail)
+            except Exception as e:
+                logger.error(f"[extract_memories] Failed: {e}")
+                _finish(story_id, "extract_memories", f"提取失败: {str(e)[:50]}")
+        else:
+            _finish(story_id, "extract_memories", "跳过（无提取器）")
+
+        return {}
+
     return (
         load_context_node,
         world_advance_node,
         plot_plan_node,
         camera_decide_node,
+        load_memories_node,
         write_chapter_node,
         consistency_check_node,
         save_chapter_node,
         save_with_warning_node,
+        extract_memories_node,
     )

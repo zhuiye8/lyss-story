@@ -81,6 +81,31 @@ class SQLiteStore:
                 CREATE INDEX IF NOT EXISTS idx_llm_logs_agent ON llm_logs(agent_name);
                 CREATE INDEX IF NOT EXISTS idx_llm_logs_story ON llm_logs(story_id);
                 CREATE INDEX IF NOT EXISTS idx_llm_logs_created ON llm_logs(created_at);
+                CREATE TABLE IF NOT EXISTS knowledge_triples (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    story_id TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    predicate TEXT NOT NULL,
+                    object TEXT NOT NULL,
+                    detail TEXT DEFAULT '',
+                    valid_from INT NOT NULL,
+                    valid_to INT,
+                    source TEXT DEFAULT '',
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_kt_story_subject ON knowledge_triples(story_id, subject);
+                CREATE INDEX IF NOT EXISTS idx_kt_story_valid ON knowledge_triples(story_id, valid_to);
+                CREATE TABLE IF NOT EXISTS character_states (
+                    story_id TEXT NOT NULL,
+                    character_id TEXT NOT NULL,
+                    chapter_num INT NOT NULL,
+                    emotional_state TEXT DEFAULT '',
+                    knowledge_summary TEXT DEFAULT '',
+                    goals_update TEXT DEFAULT '',
+                    status TEXT DEFAULT 'active',
+                    state_json TEXT DEFAULT '{}',
+                    PRIMARY KEY (story_id, character_id, chapter_num)
+                );
             """)
 
     async def create_story(self, story_id: str, title: str, theme: str) -> None:
