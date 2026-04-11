@@ -4,6 +4,7 @@ from backend.agents.camera import CameraAgent
 from backend.agents.consistency import ConsistencyAgent
 from backend.agents.director import DirectorAgent
 from backend.agents.planner import PlotPlannerAgent
+from backend.agents.titler import TitlerAgent
 from backend.agents.world import WorldAgent
 from backend.agents.writer import WriterAgent
 from backend.llm.client import LLMClient
@@ -278,7 +279,21 @@ def create_chapter_nodes(
             "retry_count": state.get("retry_count", 0),
         }
 
-        title = state["plot_structure"].get("chapter_goal", "")[:50] if state.get("plot_structure") else ""
+        # Generate chapter title via TitlerAgent
+        try:
+            titler = TitlerAgent(llm)
+            title_result = await titler.run(
+                chapter_draft=state["chapter_draft"],
+                chapter_num=state["chapter_num"],
+                story_title=state["story_bible"].get("title", "") if state.get("story_bible") else "",
+                chapter_goal=state["plot_structure"].get("chapter_goal", "") if state.get("plot_structure") else "",
+                story_id=story_id,
+            )
+            title = title_result.get("title", "")[:20]
+        except Exception as e:
+            logger.warning(f"[save_chapter] Titler failed, using fallback: {e}")
+            title = state["plot_structure"].get("chapter_goal", "")[:20] if state.get("plot_structure") else ""
+
         await sqlite.save_chapter(
             story_id=story_id,
             chapter_num=state["chapter_num"],
@@ -298,7 +313,7 @@ def create_chapter_nodes(
         json_store.append_events(story_id, state["new_events"])
 
         _enter(state["story_id"], "save_chapter")
-        _finish(state["story_id"], "save_chapter", "保存成功")
+        _finish(state["story_id"], "save_chapter", f"保存成功 — {title}")
         logger.info(f"[save_chapter] Chapter {state['chapter_num']} saved successfully")
         return {"error_message": ""}
 
@@ -325,7 +340,21 @@ def create_chapter_nodes(
             "retry_count": state.get("retry_count", 0),
         }
 
-        title = state["plot_structure"].get("chapter_goal", "")[:50] if state.get("plot_structure") else ""
+        # Generate chapter title via TitlerAgent
+        try:
+            titler = TitlerAgent(llm)
+            title_result = await titler.run(
+                chapter_draft=state["chapter_draft"],
+                chapter_num=state["chapter_num"],
+                story_title=state["story_bible"].get("title", "") if state.get("story_bible") else "",
+                chapter_goal=state["plot_structure"].get("chapter_goal", "") if state.get("plot_structure") else "",
+                story_id=story_id,
+            )
+            title = title_result.get("title", "")[:20]
+        except Exception as e:
+            logger.warning(f"[save_with_warning] Titler failed, using fallback: {e}")
+            title = state["plot_structure"].get("chapter_goal", "")[:20] if state.get("plot_structure") else ""
+
         await sqlite.save_chapter(
             story_id=story_id,
             chapter_num=state["chapter_num"],
@@ -341,7 +370,7 @@ def create_chapter_nodes(
         )
         json_store.append_events(story_id, state["new_events"])
 
-        logger.warning(f"[save_with_warning] Chapter {state['chapter_num']} saved with {len(warnings)} warnings after max retries")
+        logger.warning(f"[save_with_warning] Chapter {state['chapter_num']} '{title}' saved with {len(warnings)} warnings")
         return {"error_message": f"章节已保存，但存在{len(warnings)}个一致性警告"}
 
     async def extract_memories_node(state: ChapterGraphState) -> dict:

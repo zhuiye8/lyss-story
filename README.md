@@ -1,17 +1,19 @@
-# Story Engine — 多智能体AI中文长篇小说生成系统
+# 狸梦小说 Lymo Story — 多智能体 AI 中文长篇小说生成系统
 
-人类提供题材/思路，6个专用AI Agent通过LangGraph编排协作，自动完成世界构建、情节推进、章节撰写。
+人类提供题材/思路，7 个专用 AI Agent 通过 LangGraph 编排协作，自动完成世界构建、情节推进、章节撰写和标题命名。
+
+> Brand: 狸梦小说 / Lymo Story｜作者：zhuiye（追夜）
 
 ## 系统架构
 
 ```
 用户输入题材 → Director Agent → Story Bible（故事圣经）
                                       ↓
-循环生成每章:  World → Planner → Camera → Writer → Consistency
-              (推进世界)  (规划剧情)  (选视角)  (写正文)   (一致性校验)
+循环生成每章:  World → Planner → Camera → Writer → Consistency → Titler
+              (推进世界)  (规划剧情)  (选视角)  (写正文)   (一致性校验)  (生成标题)
                                                            ↓
-                                                    通过 → 保存章节
-                                                    失败 → 重试(最多3次)
+                                                    通过 → 保存章节 → 提取角色记忆
+                                                    失败 → 重试(最多3次) / 警告保存
 ```
 
 ### Agent 职责
@@ -21,16 +23,19 @@
 | Director | 将用户题材转化为完整的故事圣经 | StoryBible JSON |
 | World | 推进世界时间，生成事件（不写叙事） | 事件列表 + 世界状态更新 |
 | Plot Planner | 将世界事件转化为章节剧情结构 | 剧情节拍（beats） |
-| Camera | 决定POV视角、可见/隐藏事件、叙事节奏 | 摄影决策 |
+| Camera | 决定 POV 视角、可见/隐藏事件、叙事节奏 | 摄影决策 |
 | Writer | 根据剧情+视角+角色生成中文小说正文 | 2000-4000字章节 |
 | Consistency | 检查人设/时间线/世界规则一致性 | 通过/失败 + 问题列表 |
+| Titler | 基于章节正文生成简短文学标题 | 2-8字章节标题 |
 
 ## 技术栈
 
 - **后端**: Python 3.11 / FastAPI / LangGraph / LiteLLM
-- **前端**: Next.js (TypeScript) / Tailwind CSS
-- **存储**: SQLite + JSON文件 + ChromaDB（向量检索）
-- **模型**: 通过LiteLLM支持100+模型（OpenAI / Claude / Qwen / 本地模型等）
+- **管理端**: Next.js 16 (TypeScript) / Tailwind CSS 4 — 故事创建、生成控制、LLM 管理
+- **阅读端**: Next.js 16 / Tailwind CSS 4 — 独立部署的读者前端，Web + 移动双端适配
+- **存储**: SQLite + JSON 文件 + ChromaDB（向量检索）
+- **模型**: 通过 LiteLLM 支持 100+ 模型（OpenAI / Claude / DeepSeek / Qwen / 本地模型等）
+- **包管理**: 后端 pip（conda env "story"）/ 前端与阅读端 pnpm
 
 ## 环境要求
 
@@ -98,22 +103,35 @@ uvicorn backend.main:app --reload --port 8000
 
 验证：访问 http://localhost:8000/api/health 应返回 `{"status":"ok"}`
 
-### 5. 安装并启动前端
+### 5. 安装并启动管理端（创作者）
 
 ```bash
 cd frontend
 pnpm install
-pnpm run dev
+pnpm run dev   # http://localhost:3000
 ```
 
-访问 http://localhost:3000
+### 6. 安装并启动阅读端（读者）
+
+```bash
+cd reader
+pnpm install
+pnpm run dev   # http://localhost:4000
+```
+
+阅读端（狸梦小说）是独立的 Next.js 应用，消费后端 `/api/public/books/*` 接口展示已发布的小说，支持：
+- 书架 / 发现 / 我的 三 Tab 导航（移动端底部 / 桌面端顶部）
+- Eastern Noir 水墨风格的深色/亮色双模式
+- 沉浸式阅读页 + 字号/主题/翻页模式设置
+- 默认亮色模式，用户可手动切换
 
 ## 使用流程
 
-1. 在首页输入故事题材（如"一个失忆的剑客在末世废墟中寻找自己的过去"）
+1. 管理端首页输入故事题材（如"一个失忆的剑客在末世废墟中寻找自己的过去"）
 2. 系统自动生成故事圣经（世界观、角色、规则）
-3. 点击"生成下一章"，观察6个Agent协作流程
-4. 在章节阅读器中查看生成的中文小说
+3. 点击"生成下一章"，观察 7 个 Agent 协作流程
+4. 在管理端章节阅读器中查看生成的中文小说
+5. 发布故事后，读者访问 http://localhost:4000 阅读
 
 ## LLM 管理中心
 
@@ -145,44 +163,57 @@ pnpm run dev
 ```
 story/
 ├── backend/
-│   ├── main.py              # FastAPI入口
-│   ├── config.py             # 配置（环境变量）
-│   ├── models/               # Pydantic数据模型（7个）
-│   ├── agents/               # 6个Agent实现
-│   ├── prompts/              # 6套中文提示词模板
-│   ├── graph/                # LangGraph编排（核心）
-│   │   ├── init_graph.py     # 故事初始化图
-│   │   ├── chapter_graph.py  # 章节生成图（含重试循环）
-│   │   └── nodes.py          # 节点函数
-│   ├── storage/              # 持久化层
-│   │   ├── sqlite_store.py   # SQLite（故事/世界状态/章节）
-│   │   ├── json_store.py     # JSON文件（圣经/事件图）
-│   │   └── vector_store.py   # ChromaDB（角色记忆）
+│   ├── main.py                 # FastAPI 入口
+│   ├── config.py                # Pydantic Settings（环境变量）
+│   ├── deps.py                  # 依赖注入
+│   ├── models/                  # Pydantic 数据模型
+│   ├── agents/                  # 7 个 Agent（director / world / planner / camera / writer / consistency / titler）
+│   ├── prompts/                 # 对应的中文提示词模板
+│   ├── graph/                   # LangGraph 编排
+│   │   ├── init_graph.py        # 故事初始化图
+│   │   ├── chapter_graph.py     # 章节生成图（含重试循环）
+│   │   └── nodes.py             # 节点函数
+│   ├── memory/                  # 记忆系统
+│   │   ├── layered_memory.py    # 4 层记忆架构
+│   │   ├── chapter_extractor.py # 章节后记忆提取
+│   │   └── knowledge_graph.py   # 时间性知识三元组
+│   ├── storage/
+│   │   ├── sqlite_store.py      # SQLite 主库
+│   │   ├── json_store.py        # JSON 文件（圣经/事件图）
+│   │   └── vector_store.py      # ChromaDB（角色记忆向量）
 │   ├── llm/
-│   │   ├── client.py         # LiteLLM统一模型网关（per-agent模型+自动日志）
-│   │   ├── model_registry.py # 模型注册表（DB驱动的模型配置管理）
-│   │   └── logger.py         # LLM调用日志记录器
-│   └── api/                  # FastAPI路由
-│       ├── stories.py        # 故事CRUD + 生成触发
-│       ├── chapters.py       # 章节读取
-│       ├── control.py        # 生成状态控制
-│       └── llm_admin.py      # LLM管理中心API（模型/绑定/日志/用量）
-├── frontend/                 # Next.js前端
-│   ├── app/                  # 页面
-│   │   ├── page.tsx          # 首页
-│   │   ├── stories/          # 故事仪表盘 + 章节阅读器
-│   │   └── admin/            # LLM管理中心 + 请求日志
-│   ├── components/           # UI组件
-│   ├── lib/                  # API客户端（api.ts + admin-api.ts）
-│   └── types/index.ts        # TypeScript类型
-├── data/                     # 运行时数据（gitignored）
+│   │   ├── client.py            # LiteLLM 统一网关
+│   │   ├── model_registry.py    # 模型注册表
+│   │   └── logger.py            # 调用日志记录器
+│   └── api/
+│       ├── stories.py           # 故事 CRUD + 生成触发
+│       ├── chapters.py          # 章节读取
+│       ├── control.py           # 生成状态控制
+│       ├── llm_admin.py         # LLM 管理中心 API
+│       └── public.py            # 阅读端公开接口（/api/public/books/*）
+├── frontend/                    # 管理端 Next.js 16
+│   ├── app/                     # 故事仪表盘 + LLM 管理 + 请求日志
+│   ├── components/
+│   ├── lib/
+│   └── types/
+├── reader/                      # 阅读端 Next.js 16（独立部署）
+│   ├── app/
+│   │   ├── (tabs)/              # 共享底部/顶部导航的 Tab 路由组
+│   │   │   ├── page.tsx         # 书架
+│   │   │   ├── discover/        # 发现
+│   │   │   └── profile/         # 我的
+│   │   └── book/[id]/           # 详情 + 阅读页
+│   ├── components/              # BottomNav / TopBar / EmptyState / ReadingSettings 等
+│   └── public/mascot/           # Lymo 狸猫吉祥物贴纸（点赞/庆祝/伤心/爱心）
+├── data/                        # 运行时数据（gitignored）
 ├── pyproject.toml
 ├── .env.example
-└── .gitignore
+└── CLAUDE.md                    # Claude Code 项目指引
 ```
 
-## API端点
+## API 端点
 
+### 管理端
 | 方法 | 路径 | 功能 |
 |------|------|------|
 | GET | /api/health | 健康检查 |
@@ -194,21 +225,32 @@ story/
 | GET | /api/stories/{id}/chapters | 列出章节 |
 | GET | /api/stories/{id}/chapters/{num} | 读取章节 |
 | GET | /api/stories/{id}/control/status | 生成状态 |
+| GET | /api/stories/{id}/control/progress | 阶段级进度 |
 | GET | /api/admin/models | 列出模型配置 |
 | POST | /api/admin/models | 创建模型配置 |
 | PUT | /api/admin/models/{id} | 更新模型配置 |
 | DELETE | /api/admin/models/{id} | 删除模型配置 |
-| GET | /api/admin/bindings | 获取Agent-模型绑定 |
-| PUT | /api/admin/bindings/{agent} | 设置Agent绑定 |
+| GET | /api/admin/bindings | 获取 Agent-模型绑定 |
+| PUT | /api/admin/bindings/{agent} | 设置 Agent 绑定 |
 | GET | /api/admin/logs | 查询调用日志 |
-| GET | /api/admin/logs/{id} | 日志详情（含完整prompt） |
+| GET | /api/admin/logs/{id} | 日志详情（含完整 prompt） |
 | GET | /api/admin/usage | 用量统计 |
+
+### 阅读端（公开）
+| 方法 | 路径 | 功能 |
+|------|------|------|
+| GET | /api/public/books | 列出已发布小说 |
+| GET | /api/public/books/{id} | 获取小说详情 |
+| GET | /api/public/books/{id}/chapters/{num} | 读取已发布章节 |
 
 ## 开发路线
 
-- [x] **P0 核心MVP** — 6个Agent线性章节生成
-- [x] **LLM管理中心** — 模型配置、Agent绑定、用量监控、请求日志
-- [ ] **P1 角色系统** — 独立角色Agent + 记忆 + 知识图谱
-- [ ] **P2 世界引擎** — 事件DAG + 并行叙事线 + Camera升级
-- [ ] **P3 微调闭环** — 角色数据提取 + LoRA训练 + 热切换
+- [x] **P0 核心 MVP** — 6 个 Agent 线性章节生成
+- [x] **LLM 管理中心** — 模型配置、Agent 绑定、用量监控、请求日志
+- [x] **记忆系统** — 4 层分层记忆 + 章节后记忆提取 + 时间性知识图谱
+- [x] **章节命名** — Titler Agent 为每章生成简短文学标题
+- [x] **阅读端** — 独立 reader 应用，Web + 移动双端适配，Eastern Noir 水墨风格
+- [x] **发布系统** — 管理端发布小说，阅读端消费公开接口
+- [ ] **P2 世界引擎** — 事件 DAG + 并行叙事线 + Camera 升级
+- [ ] **P3 微调闭环** — 角色数据提取 + LoRA 训练 + 热切换
 - [ ] **P4 人机协同** — 导演界面 + 实时干预 + 版本管理

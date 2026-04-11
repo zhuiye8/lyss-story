@@ -3,35 +3,44 @@
 import { useEffect, useState } from "react";
 
 export default function ThemeToggle() {
-  const [isDark, setIsDark] = useState(true);
+  const [dark, setDark] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("reader-theme");
-    if (saved === "light") {
-      setIsDark(false);
-      document.documentElement.classList.remove("dark");
-    }
+    const isDark = saved ? saved === "dark" : false;
+    setDark(isDark);
+    document.documentElement.classList.toggle("dark", isDark);
   }, []);
 
   const toggle = () => {
-    const next = !isDark;
-    setIsDark(next);
-    if (next) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("reader-theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("reader-theme", "light");
-    }
+    const next = !dark;
+    setDark(next);
+    document.documentElement.classList.toggle("dark", next);
+    localStorage.setItem("reader-theme", next ? "dark" : "light");
   };
 
   return (
     <button
       onClick={toggle}
-      className="p-2 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-700 transition text-gray-400"
-      title={isDark ? "切换到亮色模式" : "切换到暗色模式"}
+      className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl hover:bg-surface-container-low transition-colors"
     >
-      {isDark ? "☀" : "☾"}
+      <span className="material-symbols-outlined text-on-surface-variant text-xl">
+        {dark ? "dark_mode" : "light_mode"}
+      </span>
+      <span className="font-body text-sm flex-1 text-left">
+        {dark ? "深色模式" : "浅色模式"}
+      </span>
+      <div
+        className={`w-10 h-6 rounded-full p-0.5 transition-colors ${
+          dark ? "bg-primary" : "bg-outline-variant"
+        }`}
+      >
+        <div
+          className={`w-5 h-5 rounded-full bg-surface shadow transition-transform ${
+            dark ? "translate-x-4" : "translate-x-0"
+          }`}
+        />
+      </div>
     </button>
   );
 }
