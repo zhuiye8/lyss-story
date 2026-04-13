@@ -1,16 +1,21 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.config import Settings
+from backend.agents.outline_parser import OutlineParserAgent
 from backend.deps import (
-    get_chapter_extractor, get_json_store, get_layered_memory, get_llm,
-    get_progress_store, get_settings, get_sqlite, get_vector,
+    get_chapter_extractor, get_json_store, get_knowledge_graph,
+    get_layered_memory, get_llm, get_plot_dedup, get_progress_store,
+    get_settings, get_sqlite, get_vector,
 )
+from backend.models.story_bible import extract_characters_from_bible
 from backend.memory.chapter_extractor import ChapterExtractor
+from backend.memory.knowledge_graph import KnowledgeGraph
 from backend.memory.layered_memory import LayeredMemory
+from backend.memory.plot_dedup import PlotDedupStore
 from backend.progress import ProgressStore
 from backend.graph.chapter_graph import build_chapter_graph
 from backend.graph.init_graph import build_init_graph
@@ -25,6 +30,16 @@ router = APIRouter()
 class CreateStoryRequest(BaseModel):
     theme: str
     requirements: str = ""
+    title: str = ""  # optional: user-specified book name
+
+
+class GenerateRequest(BaseModel):
+    word_count: int | None = None  # Override default_chapter_word_count
+
+
+class ImportOutlineRequest(BaseModel):
+    raw_text: str
+    title: str = ""
 
 
 class StoryResponse(BaseModel):
@@ -43,10 +58,11 @@ async def _run_init(
     llm: LLMClient,
     sqlite: SQLiteStore,
     json_store: JSONStore,
+    title: str = "",
 ):
     """Background task: initialize a story."""
     try:
-        graph = build_init_graph(llm)
+        graph = build_init_graph(llm, title=title)
         compiled = graph.compile()
         result = await compiled.ainvoke({
             "story_id": story_id,
@@ -82,6 +98,9 @@ async def _run_chapter(
     progress_store: ProgressStore | None = None,
     layered_memory: LayeredMemory | None = None,
     chapter_extractor: ChapterExtractor | None = None,
+    human_feedback: str | None = None,
+    plot_dedup: PlotDedupStore | None = None,
+    word_count: int | None = None,
 ):
     """Background task: generate one chapter."""
     if progress_store:
@@ -91,6 +110,7 @@ async def _run_chapter(
         graph = build_chapter_graph(
             llm, sqlite, json_store, vector,
             progress_store, layered_memory, chapter_extractor,
+            plot_dedup,
         )
         compiled = graph.compile()
 
@@ -102,16 +122,18 @@ async def _run_chapter(
             "event_history": [],
             "character_profiles": [],
             "new_events": [],
+            "storylines": [],
             "plot_structure": None,
             "camera_decision": None,
             "chapter_draft": "",
             "consistency_result": None,
             "consistency_pass": False,
             "retry_count": 0,
+            "target_word_count": word_count or settings.default_chapter_word_count,
             "max_retries": settings.max_consistency_retries,
             "memory_contexts": {},
             "error_message": "",
-            "human_feedback": None,
+            "human_feedback": human_feedback,
         })
 
         await sqlite.update_story(story_id, status="bible_ready")
@@ -136,7 +158,7 @@ async def create_story(
 ):
     story_id = str(uuid.uuid4())[:8]
     await sqlite.create_story(story_id, "", req.theme)
-    background.add_task(_run_init, story_id, req.theme, req.requirements, llm, sqlite, json_store)
+    background.add_task(_run_init, story_id, req.theme, req.requirements, llm, sqlite, json_store, req.title)
     return StoryResponse(
         story_id=story_id,
         title="",
@@ -205,6 +227,7 @@ async def publish_story(
 async def generate_chapter(
     story_id: str,
     background: BackgroundTasks,
+    req: GenerateRequest | None = None,
     llm: LLMClient = Depends(get_llm),
     settings: Settings = Depends(get_settings),
     sqlite: SQLiteStore = Depends(get_sqlite),
@@ -213,6 +236,7 @@ async def generate_chapter(
     progress_store: ProgressStore = Depends(get_progress_store),
     layered_memory: LayeredMemory = Depends(get_layered_memory),
     chapter_extractor: ChapterExtractor = Depends(get_chapter_extractor),
+    plot_dedup: PlotDedupStore = Depends(get_plot_dedup),
 ):
     story = await sqlite.get_story(story_id)
     if not story:
@@ -221,9 +245,160 @@ async def generate_chapter(
     if story["status"] not in ("bible_ready", "completed") and not story["status"].startswith("error"):
         raise HTTPException(400, f"Story is in state '{story['status']}', cannot generate")
 
+    word_count = (req.word_count if req and req.word_count else None) or settings.default_chapter_word_count
+
     chapter_num = await sqlite.get_chapter_count(story_id) + 1
     background.add_task(
         _run_chapter, story_id, chapter_num, llm, settings, sqlite, json_store, vector,
         progress_store, layered_memory, chapter_extractor,
+        None, plot_dedup, word_count,
     )
-    return {"message": f"Generating chapter {chapter_num}", "chapter_num": chapter_num}
+    return {"message": f"Generating chapter {chapter_num}", "chapter_num": chapter_num, "word_count": word_count}
+
+
+# --- Visualization endpoints ---
+
+
+@router.get("/{story_id}/characters")
+async def get_characters(
+    story_id: str,
+    json_store: JSONStore = Depends(get_json_store),
+    sqlite: SQLiteStore = Depends(get_sqlite),
+):
+    """Get character list with latest arc summaries."""
+    characters = json_store.load_characters(story_id) or []
+    for char in characters:
+        cid = char.get("character_id")
+        if not cid:
+            continue
+        try:
+            arc = await sqlite.get_latest_character_arc(story_id, cid)
+            char["arc_summary"] = arc.get("summary") if arc else None
+            char["arc_name"] = arc.get("arc_name") if arc else None
+        except Exception:
+            char["arc_summary"] = None
+    return characters
+
+
+@router.get("/{story_id}/knowledge-graph")
+async def get_knowledge_graph_data(
+    story_id: str,
+    as_of_chapter: int | None = Query(default=None),
+    json_store: JSONStore = Depends(get_json_store),
+    kg: KnowledgeGraph = Depends(get_knowledge_graph),
+):
+    """Get character relationship graph (nodes + edges) for visualization."""
+    characters = json_store.load_characters(story_id) or []
+    nodes = [
+        {"id": c.get("character_id", ""), "name": c.get("name", ""), "role": c.get("role", "")}
+        for c in characters
+        if c.get("character_id")
+    ]
+
+    triples = await kg.get_all_relationships(story_id, as_of_chapter)
+    edges = [
+        {
+            "source": t["subject"],
+            "target": t["object"],
+            "predicate": t["predicate"],
+            "detail": t.get("detail", ""),
+            "valid_from": t["valid_from"],
+            "valid_to": t.get("valid_to"),
+        }
+        for t in triples
+    ]
+
+    return {"nodes": nodes, "edges": edges}
+
+
+@router.get("/{story_id}/events")
+async def get_events(
+    story_id: str,
+    json_store: JSONStore = Depends(get_json_store),
+):
+    """Get event graph for timeline visualization."""
+    events = json_store.load_event_graph(story_id) or []
+    return events
+
+
+# --- Outline import ---
+
+
+async def _run_outline_import(
+    story_id: str,
+    raw_text: str,
+    title: str,
+    llm: LLMClient,
+    sqlite: SQLiteStore,
+    json_store: JSONStore,
+):
+    """Background task: parse user outline into StoryBible V2."""
+    try:
+        await sqlite.update_story(story_id, status="parsing_outline")
+        agent = OutlineParserAgent(llm)
+        bible = await agent.run(raw_text=raw_text, title_hint=title, story_id=story_id)
+
+        bible["bible_version"] = 2
+
+        # Extract characters for backward compat
+        characters = extract_characters_from_bible(bible)
+        bible["characters"] = characters
+
+        # Derive legacy top-level fields
+        world = bible.get("world", {})
+        bible.setdefault("setting", world.get("world_background", ""))
+        if not bible.get("world_rules"):
+            bible["world_rules"] = world.get("world_rules", [])
+        if not bible.get("power_system"):
+            bible["power_system"] = world.get("power_system")
+
+        # Build world state
+        world_state = {
+            "story_id": story_id,
+            "current_time": 0,
+            "time_description": "故事开始",
+            "global_flags": [],
+            "locations": [],
+            "active_character_ids": [
+                c.get("character_id") for c in characters if c.get("character_id")
+            ],
+            "version": 0,
+        }
+
+        # Persist
+        json_store.save_story_bible(story_id, bible)
+        json_store.save_characters(story_id, characters)
+        json_store.save_event_graph(story_id, [])
+        await sqlite.save_world_state(story_id, world_state, 0)
+        await sqlite.update_story(
+            story_id, title=bible.get("title", title or ""), status="bible_ready"
+        )
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        logging.getLogger(__name__).error(f"Outline import failed: {tb}")
+        await sqlite.update_story(story_id, status=f"error: {str(e)[:200]}")
+
+
+@router.post("/{story_id}/import-outline")
+async def import_outline(
+    story_id: str,
+    req: ImportOutlineRequest,
+    background: BackgroundTasks,
+    llm: LLMClient = Depends(get_llm),
+    sqlite: SQLiteStore = Depends(get_sqlite),
+    json_store: JSONStore = Depends(get_json_store),
+):
+    """Import a user-pasted outline and parse it into StoryBible V2."""
+    story = await sqlite.get_story(story_id)
+    if not story:
+        raise HTTPException(404, "Story not found")
+
+    background.add_task(
+        _run_outline_import, story_id, req.raw_text, req.title, llm, sqlite, json_store
+    )
+    return {
+        "story_id": story_id,
+        "title": req.title or "(parsing...)",
+        "status": "parsing_outline",
+    }

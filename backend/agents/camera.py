@@ -12,6 +12,7 @@ class CameraAgent(BaseAgent):
         character_profiles: list[dict],
         chapter_num: int,
         previous_povs: list[str],
+        new_events: list[dict] | None = None,
         story_id: str | None = None,
     ) -> dict:
         user_prompt = build_user_prompt(
@@ -19,6 +20,7 @@ class CameraAgent(BaseAgent):
             character_profiles=character_profiles,
             chapter_num=chapter_num,
             previous_povs=previous_povs,
+            new_events=new_events,
         )
         return await self._call_json(
             system_prompt=SYSTEM_PROMPT,

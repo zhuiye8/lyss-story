@@ -16,6 +16,8 @@ class WriterAgent(BaseAgent):
         previous_chapter_summary: str = "",
         retry_feedback: str = "",
         memory_contexts: dict | None = None,
+        human_feedback: str = "",
+        previous_timeline: dict | None = None,
         story_id: str | None = None,
     ) -> str:
         user_prompt = build_user_prompt(
@@ -27,6 +29,8 @@ class WriterAgent(BaseAgent):
             previous_chapter_summary=previous_chapter_summary,
             retry_feedback=retry_feedback,
             memory_contexts=memory_contexts,
+            human_feedback=human_feedback,
+            previous_timeline=previous_timeline,
         )
         return await self._call_text(
             system_prompt=SYSTEM_PROMPT,

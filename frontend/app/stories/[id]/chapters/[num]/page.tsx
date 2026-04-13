@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import ChapterReader from "@/components/ChapterReader";
+import ChapterVersionPanel from "@/components/ChapterVersionPanel";
 import { getChapter } from "@/lib/api";
 import type { ChapterDetail } from "@/types";
 
@@ -16,11 +17,15 @@ export default function ChapterPage({
   const [chapter, setChapter] = useState<ChapterDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     getChapter(storyId, chapterNum)
       .then(setChapter)
       .catch((e) => setError(e.message));
   }, [storyId, chapterNum]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
   if (error) {
     return (
@@ -68,6 +73,13 @@ export default function ChapterPage({
         </div>
       </div>
       <ChapterReader chapter={chapter} />
+      <div className="mt-8">
+        <ChapterVersionPanel
+          storyId={storyId}
+          chapterNum={chapterNum}
+          onRestored={reload}
+        />
+      </div>
     </main>
   );
 }

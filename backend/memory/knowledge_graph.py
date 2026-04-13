@@ -119,6 +119,32 @@ class KnowledgeGraph:
             )
             return [dict(row) for row in await cursor.fetchall()]
 
+    async def get_all_relationships(
+        self,
+        story_id: str,
+        as_of_chapter: int | None = None,
+    ) -> list[dict]:
+        """Get all knowledge triples for a story, optionally filtered by chapter."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            if as_of_chapter is not None:
+                cursor = await db.execute(
+                    """SELECT * FROM knowledge_triples
+                       WHERE story_id = ?
+                         AND valid_from <= ?
+                         AND (valid_to IS NULL OR valid_to > ?)
+                       ORDER BY valid_from ASC""",
+                    (story_id, as_of_chapter, as_of_chapter),
+                )
+            else:
+                cursor = await db.execute(
+                    """SELECT * FROM knowledge_triples
+                       WHERE story_id = ? AND valid_to IS NULL
+                       ORDER BY valid_from ASC""",
+                    (story_id,),
+                )
+            return [dict(row) for row in await cursor.fetchall()]
+
     async def format_relationships_for_prompt(
         self, story_id: str, character_id: str, character_profiles: list[dict]
     ) -> str:

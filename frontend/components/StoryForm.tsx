@@ -3,11 +3,12 @@
 import { useState } from "react";
 
 interface Props {
-  onSubmit: (theme: string, requirements: string) => void;
+  onSubmit: (theme: string, requirements: string, title: string) => void;
   isLoading: boolean;
 }
 
 export default function StoryForm({ onSubmit, isLoading }: Props) {
+  const [title, setTitle] = useState("");
   const [theme, setTheme] = useState("");
   const [requirements, setRequirements] = useState("");
 
@@ -15,10 +16,23 @@ export default function StoryForm({ onSubmit, isLoading }: Props) {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (theme.trim()) onSubmit(theme.trim(), requirements.trim());
+        if (theme.trim()) onSubmit(theme.trim(), requirements.trim(), title.trim());
       }}
       className="space-y-4"
     >
+      <div>
+        <label className="block text-sm font-medium mb-1">
+          书名（可选，留空则AI生成）
+        </label>
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          placeholder="例如：末世数据师、星际征途..."
+          disabled={isLoading}
+        />
+      </div>
       <div>
         <label className="block text-sm font-medium mb-1">
           故事题材 / 主题 *

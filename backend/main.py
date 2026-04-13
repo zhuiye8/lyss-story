@@ -13,6 +13,7 @@ from backend.llm.model_registry import ModelRegistry
 from backend.memory.chapter_extractor import ChapterExtractor
 from backend.memory.knowledge_graph import KnowledgeGraph
 from backend.memory.layered_memory import LayeredMemory
+from backend.memory.plot_dedup import PlotDedupStore
 from backend.progress import ProgressStore
 from backend.storage.json_store import JSONStore
 from backend.storage.sqlite_store import SQLiteStore
@@ -53,8 +54,10 @@ async def lifespan(app: FastAPI):
     app.state.llm_logger = llm_logger
     app.state.progress_store = ProgressStore()
     app.state.llm = llm
+    app.state.knowledge_graph = knowledge_graph
     app.state.layered_memory = layered_memory
     app.state.chapter_extractor = chapter_extractor
+    app.state.plot_dedup = PlotDedupStore(settings.chroma_path)
 
     logging.getLogger(__name__).info(
         f"Story Engine started. Default model: {settings.litellm_model} | Memory system: enabled"

@@ -3,6 +3,7 @@ from langgraph.graph import END, START, StateGraph
 from backend.llm.client import LLMClient
 from backend.memory.chapter_extractor import ChapterExtractor
 from backend.memory.layered_memory import LayeredMemory
+from backend.memory.plot_dedup import PlotDedupStore
 from backend.models.graph_state import ChapterGraphState
 from backend.graph.nodes import create_chapter_nodes
 from backend.progress import ProgressStore
@@ -27,6 +28,7 @@ def build_chapter_graph(
     progress_store: ProgressStore | None = None,
     layered_memory: LayeredMemory | None = None,
     chapter_extractor: ChapterExtractor | None = None,
+    plot_dedup: PlotDedupStore | None = None,
 ) -> StateGraph:
     (
         load_context,
@@ -42,6 +44,7 @@ def build_chapter_graph(
     ) = create_chapter_nodes(
         llm, sqlite, json_store, vector,
         progress_store, layered_memory, chapter_extractor,
+        plot_dedup,
     )
 
     graph = StateGraph(ChapterGraphState)

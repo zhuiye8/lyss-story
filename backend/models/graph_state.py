@@ -28,6 +28,7 @@ class ChapterGraphState(TypedDict):
 
     # Stage outputs (replace on update)
     new_events: Annotated[list[dict], replace]
+    storylines: Annotated[list[dict], replace]  # [{line_id, lead_characters, location, description, new_events}]
     plot_structure: Annotated[dict | None, replace]
     camera_decision: Annotated[dict | None, replace]
     chapter_draft: Annotated[str, replace]
@@ -35,6 +36,9 @@ class ChapterGraphState(TypedDict):
 
     # Memory context (loaded before writing)
     memory_contexts: Annotated[dict, replace]  # {character_id: CharacterMemoryContext.to_prompt_text()}
+
+    # Generation parameters
+    target_word_count: int
 
     # Control flow
     consistency_pass: Annotated[bool, replace]

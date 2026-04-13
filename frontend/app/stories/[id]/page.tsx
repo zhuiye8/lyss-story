@@ -85,11 +85,11 @@ export default function StoryDashboard({
     return () => clearInterval(interval);
   }, [refresh, status]);
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (wordCount?: number) => {
     setIsGenerating(true);
     setProgress(null);
     try {
-      await triggerGeneration(storyId);
+      await triggerGeneration(storyId, wordCount);
     } catch (e) {
       console.error(e);
     } finally {
@@ -107,6 +107,14 @@ export default function StoryDashboard({
         <h1 className="text-2xl font-bold">
           {story?.title || "加载中..."}
         </h1>
+        {story && (
+          <Link
+            href={`/stories/${storyId}/graph`}
+            className="px-3 py-1 text-xs rounded-full border border-blue-300 text-blue-600 hover:bg-blue-50 transition"
+          >
+            可视化
+          </Link>
+        )}
         {story && (
           <button
             onClick={async () => {

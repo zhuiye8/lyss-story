@@ -5,7 +5,9 @@ from backend.llm.client import LLMClient
 from backend.llm.logger import LLMLogger
 from backend.llm.model_registry import ModelRegistry
 from backend.memory.chapter_extractor import ChapterExtractor
+from backend.memory.knowledge_graph import KnowledgeGraph
 from backend.memory.layered_memory import LayeredMemory
+from backend.memory.plot_dedup import PlotDedupStore
 from backend.progress import ProgressStore
 from backend.storage.json_store import JSONStore
 from backend.storage.sqlite_store import SQLiteStore
@@ -50,3 +52,11 @@ def get_layered_memory(request: Request) -> LayeredMemory:
 
 def get_chapter_extractor(request: Request) -> ChapterExtractor:
     return request.app.state.chapter_extractor
+
+
+def get_plot_dedup(request: Request) -> PlotDedupStore:
+    return request.app.state.plot_dedup
+
+
+def get_knowledge_graph(request: Request) -> KnowledgeGraph:
+    return request.app.state.knowledge_graph

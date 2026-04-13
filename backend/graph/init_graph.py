@@ -5,8 +5,8 @@ from backend.models.graph_state import InitGraphState
 from backend.graph.nodes import create_init_nodes
 
 
-def build_init_graph(llm: LLMClient) -> StateGraph:
-    generate_bible, extract_characters, init_world = create_init_nodes(llm)
+def build_init_graph(llm: LLMClient, title: str = "") -> StateGraph:
+    generate_bible, extract_characters, init_world = create_init_nodes(llm, title=title)
 
     graph = StateGraph(InitGraphState)
     graph.add_node("generate_bible", generate_bible)
