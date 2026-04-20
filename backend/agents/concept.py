@@ -1,9 +1,9 @@
 from backend.agents.base import BaseAgent
-from backend.prompts.director import SYSTEM_PROMPT, build_user_prompt
+from backend.prompts.concept import SYSTEM_PROMPT, build_user_prompt
 
 
-class DirectorAgent(BaseAgent):
-    name = "director"
+class ConceptAgent(BaseAgent):
+    name = "concept"
 
     async def run(
         self,
@@ -14,11 +14,10 @@ class DirectorAgent(BaseAgent):
         story_id: str | None = None,
     ) -> dict:
         user_prompt = build_user_prompt(user_theme, user_requirements, title=title)
-        result = await self._call_json(
-            system_prompt=SYSTEM_PROMPT,
-            user_prompt=user_prompt,
+        return await self._call_json(
+            SYSTEM_PROMPT,
+            user_prompt,
             story_id=story_id,
-            max_tokens=12288,
+            max_tokens=4096,
+            temperature=0.7,
         )
-        result.setdefault("bible_version", 2)
-        return result

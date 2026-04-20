@@ -66,10 +66,20 @@ def build_user_prompt(
     character_profiles: list[dict],
 ) -> str:
     recent_events = event_history[-10:] if event_history else []
+    world = story_bible.get("world", {})
+    factions = world.get("factions", [])
+    factions_text = ""
+    if factions:
+        factions_text = "\n势力：\n" + "\n".join(
+            f"- {f.get('name', '')}（{f.get('stance', '')}）：{f.get('description', '')[:60]}"
+            for f in factions
+        )
+
     return f"""故事圣经摘要：
 - 标题：{story_bible.get('title', '')}
 - 类型：{story_bible.get('genre', '')}
 - 冲突：{json.dumps(story_bible.get('initial_conflicts', []), ensure_ascii=False)}
+{factions_text}
 
 当前世界状态：
 - 时间：{world_state.get('current_time', 0)}（{world_state.get('time_description', '')}）
@@ -81,4 +91,4 @@ def build_user_prompt(
 近期事件（最近10个）：
 {json.dumps(recent_events, ensure_ascii=False, indent=2)}
 
-请推进世界时间，按叙事线分组生成新的事件。"""
+请推进世界时间，按叙事线分组生成新的事件。事件应涉及上述势力的动态。"""

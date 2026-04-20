@@ -1,26 +1,353 @@
 @import "tailwindcss";
 
+/**
+ * Lymo / 狸梦 — "墨色书房 + 星空宇宙"
+ * 暗色主 + 墨色 / 朱砂 / 鎏金 / 星辉蓝
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Core palette */
+  --lymo-ink-950: #0b0f14;         /* 最深墨 — 页面底色 */
+  --lymo-ink-900: #0f1419;         /* 墨色 — 主背景 */
+  --lymo-ink-800: #151b23;         /* 墨色次背景 */
+  --lymo-ink-700: #1d252f;         /* 卡片 */
+  --lymo-ink-600: #2d3d4e;         /* 墨青 — 边框/分隔 */
+  --lymo-ink-500: #3e5269;         /* 悬停边框 */
+
+  --lymo-paper-50: #fafaf7;        /* 宣纸白（亮色模式） */
+  --lymo-paper-100: #f2efe6;
+
+  --lymo-vermilion-500: #c73e3a;   /* 朱砂红 — 主色 */
+  --lymo-vermilion-400: #d65450;
+  --lymo-vermilion-600: #a83431;
+  --lymo-vermilion-300: #e07e7a;
+
+  --lymo-gold-500: #d4a84b;        /* 鎏金 — 强调 */
+  --lymo-gold-400: #e0bc6a;
+  --lymo-gold-600: #b38f3a;
+
+  --lymo-stellar-500: #5a8fd4;     /* 星辉蓝 — 链接/3D 粒子 */
+  --lymo-stellar-400: #7ba8e0;
+  --lymo-stellar-600: #4374b5;
+
+  --lymo-jade-500: #5aa67d;        /* 玉绿 — 成功/正向关系 */
+  --lymo-jade-400: #72bd95;
+
+  --lymo-text-1: #e8ecef;          /* 主文字 */
+  --lymo-text-2: #a8b3bd;          /* 次文字 */
+  --lymo-text-3: #6b7785;          /* 弱文字 */
+  --lymo-text-muted: #4a5460;      /* 禁用 */
+
+  /* shadcn tokens (mapped to Lymo) — dark default */
+  --background: var(--lymo-ink-900);
+  --foreground: var(--lymo-text-1);
+  --card: var(--lymo-ink-800);
+  --card-foreground: var(--lymo-text-1);
+  --popover: var(--lymo-ink-800);
+  --popover-foreground: var(--lymo-text-1);
+  --primary: var(--lymo-vermilion-500);
+  --primary-foreground: #ffffff;
+  --secondary: var(--lymo-ink-700);
+  --secondary-foreground: var(--lymo-text-1);
+  --muted: var(--lymo-ink-700);
+  --muted-foreground: var(--lymo-text-2);
+  --accent: var(--lymo-gold-500);
+  --accent-foreground: var(--lymo-ink-900);
+  --destructive: #e24a4a;
+  --destructive-foreground: #ffffff;
+  --border: var(--lymo-ink-600);
+  --input: var(--lymo-ink-600);
+  --ring: var(--lymo-vermilion-400);
+  --radius: 12px;
+}
+
+/* Light mode override — 宣纸感 */
+html.light {
+  /* Brighter hues for legibility on paper */
+  --lymo-text-1: #1a1d21;
+  --lymo-text-2: #4a5460;
+  --lymo-text-3: #77808a;
+  --lymo-ink-900: #fafaf7;
+  --lymo-ink-800: #f2efe6;
+  --lymo-ink-700: #ede9dc;
+  --lymo-ink-600: #d8d3c4;
+  --lymo-ink-500: #b8b1a0;
+  --lymo-gold-400: #b38f3a;
+  --lymo-gold-500: #9a7a2e;
+  --lymo-vermilion-300: #a83431;
+  --lymo-vermilion-400: #8f2b28;
+  --lymo-stellar-400: #4374b5;
+  --lymo-stellar-500: #335a91;
+  --lymo-jade-400: #3e7f5a;
+  --lymo-jade-500: #2e6a48;
+
+  --background: #f7f4ec;
+  --foreground: #1a1d21;
+  --card: #ffffff;
+  --card-foreground: #1a1d21;
+  --popover: #ffffff;
+  --popover-foreground: #1a1d21;
+  --primary: #a83431;
+  --primary-foreground: #ffffff;
+  --secondary: #ede9dc;
+  --secondary-foreground: #1a1d21;
+  --muted: #ede9dc;
+  --muted-foreground: #5a6370;
+  --accent: #9a7a2e;
+  --accent-foreground: #ffffff;
+  --border: #d8d3c4;
+  --input: #d8d3c4;
+  --ring: #c73e3a;
+  color-scheme: light;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Extended Lymo scale */
+  --color-lymo-ink-950: var(--lymo-ink-950);
+  --color-lymo-ink-900: var(--lymo-ink-900);
+  --color-lymo-ink-800: var(--lymo-ink-800);
+  --color-lymo-ink-700: var(--lymo-ink-700);
+  --color-lymo-ink-600: var(--lymo-ink-600);
+  --color-lymo-ink-500: var(--lymo-ink-500);
+  --color-lymo-vermilion-300: var(--lymo-vermilion-300);
+  --color-lymo-vermilion-400: var(--lymo-vermilion-400);
+  --color-lymo-vermilion-500: var(--lymo-vermilion-500);
+  --color-lymo-vermilion-600: var(--lymo-vermilion-600);
+  --color-lymo-gold-400: var(--lymo-gold-400);
+  --color-lymo-gold-500: var(--lymo-gold-500);
+  --color-lymo-gold-600: var(--lymo-gold-600);
+  --color-lymo-stellar-400: var(--lymo-stellar-400);
+  --color-lymo-stellar-500: var(--lymo-stellar-500);
+  --color-lymo-stellar-600: var(--lymo-stellar-600);
+  --color-lymo-jade-400: var(--lymo-jade-400);
+  --color-lymo-jade-500: var(--lymo-jade-500);
+  --color-lymo-text-1: var(--lymo-text-1);
+  --color-lymo-text-2: var(--lymo-text-2);
+  --color-lymo-text-3: var(--lymo-text-3);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-sm: calc(var(--radius) - 6px);
+
+  --font-sans: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--background);
+  color: var(--foreground);
+  color-scheme: dark;
+}
+
+html.light {
+  color-scheme: light;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography helpers */
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+/* Lymo brand gradient accents */
+.bg-ink-grad {
+  background: radial-gradient(
+    ellipse at top,
+    var(--lymo-ink-800) 0%,
+    var(--lymo-ink-900) 40%,
+    var(--lymo-ink-950) 100%
+  );
+}
+
+.bg-vermilion-grad {
+  background: linear-gradient(
+    135deg,
+    var(--lymo-vermilion-500) 0%,
+    var(--lymo-vermilion-600) 100%
+  );
+}
+
+.bg-gold-grad {
+  background: linear-gradient(
+    135deg,
+    var(--lymo-gold-500) 0%,
+    var(--lymo-gold-600) 100%
+  );
+}
+
+.text-gold-grad {
+  background: linear-gradient(135deg, #e0bc6a 0%, #d4a84b 50%, #b38f3a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.text-vermilion-grad {
+  background: linear-gradient(135deg, #e07e7a 0%, #c73e3a 50%, #a83431 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Paper / ink texture utility */
+.ink-texture {
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(212, 168, 75, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 80% 90%, rgba(199, 62, 58, 0.04) 0%, transparent 40%);
+}
+
+/* Star-field (dark) */
+.star-field {
+  background-color: var(--lymo-ink-950);
+  background-image:
+    radial-gradient(1px 1px at 15% 20%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 40% 60%, rgba(90, 143, 212, 0.6), transparent),
+    radial-gradient(1.5px 1.5px at 70% 30%, rgba(212, 168, 75, 0.5), transparent),
+    radial-gradient(1px 1px at 85% 80%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 25% 75%, rgba(199, 62, 58, 0.4), transparent),
+    radial-gradient(1.5px 1.5px at 55% 15%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1px 1px at 92% 45%, rgba(90, 143, 212, 0.5), transparent);
+  background-size: 100% 100%;
+}
+
+/* Light mode: soft paper speckles instead of starfield */
+html.light .star-field {
+  background-color: #f7f4ec;
+  background-image:
+    radial-gradient(1px 1px at 15% 20%, rgba(168, 52, 49, 0.2), transparent),
+    radial-gradient(1px 1px at 40% 60%, rgba(154, 122, 46, 0.2), transparent),
+    radial-gradient(1.5px 1.5px at 70% 30%, rgba(51, 90, 145, 0.18), transparent),
+    radial-gradient(1px 1px at 85% 80%, rgba(168, 52, 49, 0.15), transparent),
+    radial-gradient(1px 1px at 25% 75%, rgba(154, 122, 46, 0.18), transparent);
+}
+
+html.light .bg-ink-grad {
+  background: radial-gradient(
+    ellipse at top,
+    #ffffff 0%,
+    #f7f4ec 60%,
+    #ede9dc 100%
+  );
+}
+
+html.light ::selection {
+  background: rgba(168, 52, 49, 0.2);
+  color: #8f2b28;
+}
+
+html.light .card-hover:hover {
+  box-shadow: 0 8px 20px rgba(26, 29, 33, 0.08);
+}
+
+html.light .glow-vermilion {
+  box-shadow: 0 0 12px rgba(199, 62, 58, 0.15);
+}
+html.light .glow-gold {
+  box-shadow: 0 0 12px rgba(154, 122, 46, 0.15);
+}
+html.light .glow-stellar {
+  box-shadow: 0 0 12px rgba(90, 143, 212, 0.15);
+}
+
+/* Sonner light theme */
+html.light [data-sonner-toaster] {
+  --normal-bg: #ffffff;
+  --normal-text: #1a1d21;
+  --normal-border: #d8d3c4;
+}
+
+/* Scrollbar — Lymo themed */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--lymo-ink-600);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--lymo-ink-500);
+}
+
+/* Selection */
+::selection {
+  background: rgba(199, 62, 58, 0.3);
+  color: var(--lymo-gold-400);
+}
+
+/* Subtle noise overlay (optional, toggle via class) */
+.noise-overlay {
+  position: relative;
+}
+.noise-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.02;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+}
+
+/* React Flow + reagraph: ensure SSR-safe theme */
+.react-flow__node {
+  font-family: var(--font-sans);
+}
+
+/* ECharts tooltip override */
+.echarts-tooltip {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--card-foreground) !important;
+  border-radius: 8px !important;
+}
+
+/* Utility: glow */
+.glow-vermilion {
+  box-shadow: 0 0 20px rgba(199, 62, 58, 0.25), 0 0 40px rgba(199, 62, 58, 0.1);
+}
+.glow-gold {
+  box-shadow: 0 0 20px rgba(212, 168, 75, 0.25), 0 0 40px rgba(212, 168, 75, 0.1);
+}
+.glow-stellar {
+  box-shadow: 0 0 20px rgba(90, 143, 212, 0.25), 0 0 40px rgba(90, 143, 212, 0.1);
+}
+
+/* Utility: card hover lift */
+.card-hover {
+  transition: all 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
 }

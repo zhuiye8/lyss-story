@@ -11,6 +11,23 @@ from backend.llm.model_registry import ModelRegistry
 logger = logging.getLogger(__name__)
 
 
+def normalize_litellm_model(model: str, api_base: str | None) -> str:
+    """Auto-add 'openai/' prefix when api_base is set but model has no provider prefix.
+
+    LiteLLM requires a provider prefix (e.g. 'openai/gpt-4', 'deepseek/deepseek-chat')
+    to know which SDK path to use. When a custom api_base is provided (OpenAI-compatible
+    endpoint like DashScope, vLLM, Ollama, etc.), the provider is 'openai'.
+    Models that already have a '/' (like 'deepseek/deepseek-chat') are left as-is.
+    """
+    if not model:
+        return model
+    if "/" in model:
+        return model  # already has provider prefix
+    if api_base:
+        return f"openai/{model}"
+    return model
+
+
 class LLMClient:
     def __init__(
         self,
@@ -29,19 +46,21 @@ class LLMClient:
         if self.registry and agent_name != "unknown":
             config = await self.registry.get_model_for_agent(agent_name)
             if config:
+                api_base = config.get("api_base") or self.default_api_base
                 return {
-                    "model": config["litellm_model"],
+                    "model": normalize_litellm_model(config["litellm_model"], api_base),
                     "api_key": config["api_key"] or self.default_api_key,
-                    "api_base": config.get("api_base") or self.default_api_base,
+                    "api_base": api_base,
                     "model_config_id": config["id"],
                     "cost_per_million_input": config.get("cost_per_million_input", 0),
                     "cost_per_million_output": config.get("cost_per_million_output", 0),
                     "currency": config.get("currency", "CNY"),
                 }
+        default_base = self.default_api_base
         return {
-            "model": self.default_model,
+            "model": normalize_litellm_model(self.default_model, default_base),
             "api_key": self.default_api_key,
-            "api_base": self.default_api_base,
+            "api_base": default_base,
             "model_config_id": "default",
             "cost_per_million_input": 0,
             "cost_per_million_output": 0,

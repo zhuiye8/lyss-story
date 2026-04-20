@@ -11,9 +11,12 @@ from backend.llm.client import LLMClient
 from backend.llm.logger import LLMLogger
 from backend.llm.model_registry import ModelRegistry
 from backend.memory.chapter_extractor import ChapterExtractor
+from backend.memory.context_builder import ContextBuilder
 from backend.memory.knowledge_graph import KnowledgeGraph
 from backend.memory.layered_memory import LayeredMemory
 from backend.memory.plot_dedup import PlotDedupStore
+from backend.memory.world_book import WorldBook
+from backend.services.task_registry import TaskRegistry
 from backend.progress import ProgressStore
 from backend.storage.json_store import JSONStore
 from backend.storage.sqlite_store import SQLiteStore
@@ -44,7 +47,9 @@ async def lifespan(app: FastAPI):
     # Initialize memory system
     knowledge_graph = KnowledgeGraph(settings.sqlite_path)
     layered_memory = LayeredMemory(vector, knowledge_graph)
-    chapter_extractor = ChapterExtractor(llm, vector, knowledge_graph, settings.sqlite_path)
+    chapter_extractor = ChapterExtractor(llm, vector, knowledge_graph, settings.sqlite_path, sqlite_store=sqlite)
+    world_book = WorldBook(sqlite)
+    context_builder = ContextBuilder(sqlite, vector, knowledge_graph, world_book)
 
     app.state.settings = settings
     app.state.sqlite = sqlite
@@ -58,6 +63,9 @@ async def lifespan(app: FastAPI):
     app.state.layered_memory = layered_memory
     app.state.chapter_extractor = chapter_extractor
     app.state.plot_dedup = PlotDedupStore(settings.chroma_path)
+    app.state.world_book = world_book
+    app.state.context_builder = context_builder
+    app.state.task_registry = TaskRegistry()
 
     logging.getLogger(__name__).info(
         f"Story Engine started. Default model: {settings.litellm_model} | Memory system: enabled"

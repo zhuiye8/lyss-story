@@ -1,20 +1,43 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Noto_Serif_SC, JetBrains_Mono, Noto_Sans_SC } from "next/font/google";
+import { Toaster } from "sonner";
+import { NavBar } from "@/components/lymo/nav-bar";
+import { ThemeScript } from "@/components/lymo/theme-toggle";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const notoSansSC = Noto_Sans_SC({
+  variable: "--font-noto-sans-sc",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
+
+const notoSerifSC = Noto_Serif_SC({
+  variable: "--font-noto-serif-sc",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "900"],
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
+  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Story Engine - AI小说生成系统",
-  description: "多智能体协作的AI中文长篇小说生成系统",
+  title: "狸梦 Lymo · 开启你的小说宇宙",
+  description:
+    "基于多智能体协作的 AI 中文长篇小说创作平台。世界观、角色、剧情、章节，一体生成。",
+  icons: {
+    icon: "/mascot/lymo-thumbs-up.png",
+  },
 };
 
 export default function RootLayout({
@@ -25,20 +48,24 @@ export default function RootLayout({
   return (
     <html
       lang="zh-CN"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${notoSansSC.variable} ${notoSerifSC.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
-        <nav className="border-b bg-white">
-          <div className="max-w-6xl mx-auto px-8 py-3 flex items-center justify-between">
-            <a href="/" className="font-bold text-lg">Story Engine</a>
-            <div className="flex gap-4 text-sm">
-              <a href="/" className="text-gray-600 hover:text-black">首页</a>
-              <a href="/admin" className="text-gray-600 hover:text-black">管理中心</a>
-              <a href="/admin/logs" className="text-gray-600 hover:text-black">请求日志</a>
-            </div>
-          </div>
-        </nav>
-        {children}
+      <head>
+        <ThemeScript />
+      </head>
+      <body className="min-h-full flex flex-col bg-background ink-texture">
+        <NavBar />
+        <main className="flex-1">{children}</main>
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            classNames: {
+              toast: "bg-card border-border text-foreground",
+              description: "text-muted-foreground",
+            },
+          }}
+        />
       </body>
     </html>
   );

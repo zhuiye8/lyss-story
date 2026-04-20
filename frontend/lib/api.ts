@@ -6,7 +6,7 @@ import type {
   ChapterVersionSummary,
   GenerationStatus,
   KnowledgeGraphData,
-  StoryBible,
+  StoryBibleV2,
   StoryEvent,
   StoryResponse,
 } from "@/types";
@@ -25,12 +25,24 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 export async function createStory(
   theme: string,
   requirements: string = "",
-  title: string = ""
+  title: string = "",
+  skipInit: boolean = false,
 ): Promise<StoryResponse> {
   return fetchJson(`${API_BASE}/stories`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ theme, requirements, title }),
+    body: JSON.stringify({ theme, requirements, title, skip_init: skipInit }),
+  });
+}
+
+export async function updateBible(
+  storyId: string,
+  bible: Record<string, unknown>
+): Promise<{ message: string; title: string }> {
+  return fetchJson(`${API_BASE}/stories/${storyId}/bible`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(bible),
   });
 }
 
@@ -54,7 +66,11 @@ export async function getStory(storyId: string): Promise<StoryResponse> {
   return fetchJson(`${API_BASE}/stories/${storyId}`);
 }
 
-export async function getStoryBible(storyId: string): Promise<StoryBible> {
+export async function deleteStory(storyId: string): Promise<void> {
+  await fetchJson(`${API_BASE}/stories/${storyId}`, { method: "DELETE" });
+}
+
+export async function getStoryBible(storyId: string): Promise<StoryBibleV2> {
   return fetchJson(`${API_BASE}/stories/${storyId}/bible`);
 }
 
@@ -84,6 +100,14 @@ export async function triggerGeneration(
 
 export async function getStatus(storyId: string): Promise<GenerationStatus> {
   return fetchJson(`${API_BASE}/stories/${storyId}/control/status`);
+}
+
+export async function cancelGeneration(
+  storyId: string
+): Promise<{ story_id: string; cancelled: boolean; message: string }> {
+  return fetchJson(`${API_BASE}/stories/${storyId}/control/cancel`, {
+    method: "POST",
+  });
 }
 
 export async function publishStory(
@@ -134,15 +158,46 @@ export async function getProgress(storyId: string): Promise<GenerationProgressDa
 export async function regenerateChapter(
   storyId: string,
   chapterNum: number,
-  feedback: string
-): Promise<{ message: string; chapter_num: number }> {
+  feedback: string,
+  chaptersToInvalidate?: number[]
+): Promise<{ message: string; chapter_num: number; cascade_invalidated: number[] }> {
+  const body: Record<string, unknown> = { feedback };
+  if (chaptersToInvalidate !== undefined) {
+    body.chapters_to_invalidate = chaptersToInvalidate;
+  }
   return fetchJson(
     `${API_BASE}/stories/${storyId}/chapters/${chapterNum}/regenerate`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ feedback }),
+      body: JSON.stringify(body),
     }
+  );
+}
+
+export interface AffectedChapterInfo {
+  chapter_num: number;
+  source_version_id: number;
+  dep_chapters: number[];
+  memory_count: number;
+  triple_count: number;
+  state_count: number;
+  summary_exists: boolean;
+  brief: string;
+}
+
+export interface RegeneratePlanResponse {
+  target_chapter: number;
+  target_current_version_id: number | null;
+  affected_chapters: AffectedChapterInfo[];
+}
+
+export async function getRegeneratePlan(
+  storyId: string,
+  chapterNum: number,
+): Promise<RegeneratePlanResponse> {
+  return fetchJson(
+    `${API_BASE}/stories/${storyId}/chapters/${chapterNum}/regenerate/plan`,
   );
 }
 
@@ -176,6 +231,15 @@ export async function restoreChapterVersion(
   );
 }
 
+export async function getCharacterArcHistory(
+  storyId: string,
+  characterId: string
+): Promise<{ arcs: any[]; states: any[] }> {
+  return fetchJson(
+    `${API_BASE}/stories/${storyId}/character-arcs/${characterId}`
+  );
+}
+
 // --- Visualization APIs ---
 
 export async function getCharacters(
@@ -195,4 +259,33 @@ export async function getKnowledgeGraph(
 
 export async function getEvents(storyId: string): Promise<StoryEvent[]> {
   return fetchJson(`${API_BASE}/stories/${storyId}/events`);
+}
+
+export interface VersionTreeVersion {
+  id: number;
+  chapter_num: number;
+  version_num: number;
+  title: string;
+  pov: string;
+  word_count: number;
+  feedback: string;
+  is_live: number;
+  created_at: string;
+}
+
+export interface VersionTreeDep {
+  chapter_num: number;
+  source_version_id: number;
+  depends_on_chapter: number;
+  depends_on_version_id: number;
+  dep_type: string;
+}
+
+export interface VersionTreeData {
+  chapters: { chapter_num: number; versions: VersionTreeVersion[] }[];
+  dependencies: VersionTreeDep[];
+}
+
+export async function getVersionTree(storyId: string): Promise<VersionTreeData> {
+  return fetchJson(`${API_BASE}/stories/${storyId}/version-tree`);
 }

@@ -12,7 +12,7 @@ class PlotPlannerAgent(BaseAgent):
         new_events: list[dict],
         chapter_num: int,
         event_history: list[dict],
-        current_arc: dict | None = None,
+        current_volume: dict | None = None,
         similar_past_patterns: list[dict] | None = None,
         storylines: list[dict] | None = None,
         story_id: str | None = None,
@@ -22,7 +22,7 @@ class PlotPlannerAgent(BaseAgent):
             new_events=new_events,
             chapter_num=chapter_num,
             event_history=event_history,
-            current_arc=current_arc,
+            current_volume=current_volume,
             similar_past_patterns=similar_past_patterns,
             storylines=storylines,
         )

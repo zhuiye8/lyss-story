@@ -69,6 +69,7 @@ export interface GenerationStatus {
   status: string;
   current_chapter: number | null;
   error_message: string | null;
+  is_task_running?: boolean;
 }
 
 export interface ChapterVersionSummary {
@@ -78,6 +79,7 @@ export interface ChapterVersionSummary {
   pov: string;
   word_count: number;
   feedback: string;
+  is_live?: boolean;
   created_at: string;
 }
 

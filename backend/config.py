@@ -14,8 +14,15 @@ class Settings(BaseSettings):
     chroma_path: str = "data/chroma"
 
     # Generation parameters
-    max_consistency_retries: int = 3
+    max_consistency_retries: int = 2
     default_chapter_word_count: int = 3000
+
+    # Consistency thresholds (0-100 for chapter, 0.0-1.0 for scene)
+    # Lower = more lenient (fewer rewrites). Raise early in a story, lower when long context degrades scores.
+    chapter_consistency_threshold: int = 70        # score out of 100; below this → fail
+    chapter_max_critical: int = 0                  # max critical issues allowed (0 = none)
+    chapter_max_warnings: int = 3                  # max warning issues before fail
+    scene_consistency_threshold: float = 0.7       # score 0-1; below this → scene retry
 
     # Server
     host: str = "0.0.0.0"

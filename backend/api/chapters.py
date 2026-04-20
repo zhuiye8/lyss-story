@@ -1,17 +1,24 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
+import asyncio
+
 from backend.api.stories import _run_chapter
 from backend.config import Settings
 from backend.deps import (
-    get_chapter_extractor, get_json_store, get_layered_memory, get_llm,
-    get_plot_dedup, get_progress_store, get_settings, get_sqlite, get_vector,
+    get_chapter_extractor, get_context_builder, get_json_store,
+    get_knowledge_graph, get_layered_memory, get_llm, get_plot_dedup,
+    get_progress_store, get_settings, get_sqlite, get_task_registry, get_vector,
 )
 from backend.llm.client import LLMClient
 from backend.memory.chapter_extractor import ChapterExtractor
+from backend.memory.context_builder import ContextBuilder
+from backend.memory.knowledge_graph import KnowledgeGraph
 from backend.memory.layered_memory import LayeredMemory
 from backend.memory.plot_dedup import PlotDedupStore
+from backend.services.task_registry import TaskRegistry
 from backend.progress import ProgressStore
+from backend.services.regeneration import RegenerationPlanner
 from backend.storage.json_store import JSONStore
 from backend.storage.sqlite_store import SQLiteStore
 from backend.storage.vector_store import VectorStore
@@ -41,6 +48,26 @@ class ChapterDetail(BaseModel):
 
 class RegenerateRequest(BaseModel):
     feedback: str = ""
+    # Phase 2: cascade options. If chapters_to_invalidate is empty, all downstream are invalidated.
+    # If None, no cascade (legacy behaviour). Prefer passing an explicit list from UI.
+    chapters_to_invalidate: list[int] | None = None
+
+
+class AffectedChapterInfo(BaseModel):
+    chapter_num: int
+    source_version_id: int
+    dep_chapters: list[int]
+    memory_count: int
+    triple_count: int
+    state_count: int
+    summary_exists: bool
+    brief: str
+
+
+class RegeneratePlanResponse(BaseModel):
+    target_chapter: int
+    target_current_version_id: int | None
+    affected_chapters: list[AffectedChapterInfo]
 
 
 class ChapterVersionSummary(BaseModel):
@@ -50,6 +77,7 @@ class ChapterVersionSummary(BaseModel):
     pov: str
     word_count: int
     feedback: str
+    is_live: bool = False
     created_at: str
 
 
@@ -116,6 +144,36 @@ async def publish_chapter(
     return {"message": f"Chapter {chapter_num} {'published' if publish else 'unpublished'}", "is_published": publish}
 
 
+@router.get("/{chapter_num}/regenerate/plan", response_model=RegeneratePlanResponse)
+async def regenerate_plan(
+    story_id: str,
+    chapter_num: int,
+    sqlite: SQLiteStore = Depends(get_sqlite),
+    vector: VectorStore = Depends(get_vector),
+    kg: KnowledgeGraph = Depends(get_knowledge_graph),
+):
+    """Preview the cascade impact of regenerating a chapter."""
+    planner = RegenerationPlanner(sqlite, vector, kg)
+    plan = await planner.plan(story_id, chapter_num)
+    return RegeneratePlanResponse(
+        target_chapter=plan.target_chapter,
+        target_current_version_id=plan.target_current_version_id,
+        affected_chapters=[
+            AffectedChapterInfo(
+                chapter_num=a.chapter_num,
+                source_version_id=a.source_version_id,
+                dep_chapters=a.dep_chapters,
+                memory_count=a.memory_count,
+                triple_count=a.triple_count,
+                state_count=a.state_count,
+                summary_exists=a.summary_exists,
+                brief=a.brief,
+            )
+            for a in plan.affected_chapters
+        ],
+    )
+
+
 @router.post("/{chapter_num}/regenerate")
 async def regenerate_chapter(
     story_id: str,
@@ -127,16 +185,21 @@ async def regenerate_chapter(
     sqlite: SQLiteStore = Depends(get_sqlite),
     json_store: JSONStore = Depends(get_json_store),
     vector: VectorStore = Depends(get_vector),
+    kg: KnowledgeGraph = Depends(get_knowledge_graph),
     progress_store: ProgressStore = Depends(get_progress_store),
     layered_memory: LayeredMemory = Depends(get_layered_memory),
     chapter_extractor: ChapterExtractor = Depends(get_chapter_extractor),
     plot_dedup: PlotDedupStore = Depends(get_plot_dedup),
+    context_builder: ContextBuilder = Depends(get_context_builder),
+    task_registry: TaskRegistry = Depends(get_task_registry),
 ):
-    """Regenerate a chapter with optional human feedback.
+    """Regenerate a chapter with optional human feedback + cascade control.
 
-    The existing live chapter is snapshotted into chapter_versions first,
-    then the pipeline is re-run to produce a new version that overwrites
-    the live chapter.
+    Steps:
+    1. Snapshot the current live version (so the regen itself is reversible)
+    2. Deactivate the old version's memories (so downstream context won't see old facts)
+    3. Optionally cascade-invalidate downstream chapters' memories per UI selection
+    4. Run the chapter pipeline → produces a new is_live=1 version
     """
     story = await sqlite.get_story(story_id)
     if not story:
@@ -148,24 +211,60 @@ async def regenerate_chapter(
     if not current:
         raise HTTPException(404, "Chapter not found")
 
-    # Snapshot current version before regenerating
-    await sqlite.save_chapter_version(
-        story_id=story_id,
-        chapter_num=chapter_num,
-        title=current.get("title", ""),
-        pov=current.get("pov", ""),
-        content=current.get("content", ""),
-        events=current.get("events_covered", []),
-        metadata=current.get("metadata", {}),
-        feedback=req.feedback,
-    )
+    # 1. Snapshot current live version (without flipping it, so we have a pointer before demotion)
+    old_version_id = await sqlite.get_live_version_id(story_id, chapter_num)
+    if old_version_id is None:
+        # Defensive: create a snapshot now
+        old_version_id = await sqlite.snapshot_only_version(
+            story_id=story_id,
+            chapter_num=chapter_num,
+            title=current.get("title", ""),
+            pov=current.get("pov", ""),
+            content=current.get("content", ""),
+            events=current.get("events_covered", []),
+            metadata=current.get("metadata", {}),
+            feedback=req.feedback or "",
+        )
+    else:
+        # Add a feedback-tagged snapshot copy so the regen itself is reviewable
+        await sqlite.snapshot_only_version(
+            story_id=story_id,
+            chapter_num=chapter_num,
+            title=current.get("title", ""),
+            pov=current.get("pov", ""),
+            content=current.get("content", ""),
+            events=current.get("events_covered", []),
+            metadata=current.get("metadata", {}),
+            feedback=f"[pre-regen snapshot] {req.feedback or ''}".strip(),
+        )
 
-    background.add_task(
-        _run_chapter, story_id, chapter_num, llm, settings, sqlite, json_store, vector,
-        progress_store, layered_memory, chapter_extractor, req.feedback or None,
-        plot_dedup,
+    # 2. Deactivate old version's memories
+    planner = RegenerationPlanner(sqlite, vector, kg)
+    await planner.invalidate_old_live_memories(story_id, chapter_num, old_version_id)
+
+    # 3. Cascade invalidation per UI selection
+    if req.chapters_to_invalidate is not None:
+        await planner.apply_invalidation(
+            story_id, chapter_num, req.chapters_to_invalidate
+        )
+
+    if task_registry.is_running(story_id):
+        raise HTTPException(409, "该小说已有生成任务在运行，请先停止再重新生成")
+
+    # 4. Kick off pipeline as a tracked asyncio task
+    task = asyncio.create_task(
+        _run_chapter(
+            story_id, chapter_num, llm, settings, sqlite, json_store, vector,
+            progress_store, layered_memory, chapter_extractor, req.feedback or None,
+            plot_dedup, None, context_builder,
+        )
     )
-    return {"message": f"Regenerating chapter {chapter_num}", "chapter_num": chapter_num}
+    task_registry.register(story_id, chapter_num, task, kind="chapter")
+    return {
+        "message": f"Regenerating chapter {chapter_num}",
+        "chapter_num": chapter_num,
+        "cascade_invalidated": req.chapters_to_invalidate or [],
+    }
 
 
 @router.get("/{chapter_num}/versions", response_model=list[ChapterVersionSummary])
@@ -183,6 +282,7 @@ async def list_versions(
             pov=r.get("pov", ""),
             word_count=r.get("word_count", 0),
             feedback=r.get("feedback", ""),
+            is_live=bool(r.get("is_live", 0)),
             created_at=r["created_at"],
         )
         for r in rows
@@ -219,10 +319,32 @@ async def restore_version(
     chapter_num: int,
     version_id: int,
     sqlite: SQLiteStore = Depends(get_sqlite),
+    vector: VectorStore = Depends(get_vector),
+    kg: KnowledgeGraph = Depends(get_knowledge_graph),
 ):
-    restored = await sqlite.restore_chapter_version(version_id)
-    if not restored or restored["story_id"] != story_id or restored["chapter_num"] != chapter_num:
+    """Restore an older version as live.
+
+    Also toggles memory activation: deactivate current live's memories,
+    reactivate the restored version's memories.
+    """
+    target = await sqlite.get_chapter_version(version_id)
+    if not target or target["story_id"] != story_id or target["chapter_num"] != chapter_num:
         raise HTTPException(404, "Version not found")
+
+    planner = RegenerationPlanner(sqlite, vector, kg)
+    # Deactivate current live
+    current_live_id = await sqlite.get_live_version_id(story_id, chapter_num)
+    if current_live_id is not None and current_live_id != version_id:
+        await planner.cascade_invalidate(story_id, chapter_num, current_live_id, active=False)
+
+    # Flip live + update chapters materialized view
+    restored = await sqlite.restore_chapter_version(version_id)
+    if not restored:
+        raise HTTPException(404, "Restore failed")
+
+    # Reactivate restored version's memories
+    await planner.reactivate_version(story_id, chapter_num, version_id)
+
     return {
         "message": f"Chapter {chapter_num} restored to version {restored['version_num']}",
         "version_num": restored["version_num"],

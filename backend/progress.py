@@ -44,14 +44,16 @@ class GenerationProgress:
         }
 
 
-# Default pipeline stages
+# Default pipeline stages (matches chapter_graph in backend/graph/chapter_graph.py)
 CHAPTER_STAGES = [
     ("load_context", "加载上下文"),
     ("world_advance", "推进世界"),
     ("plot_plan", "规划剧情"),
     ("camera_decide", "选择视角"),
+    ("build_context", "组装上下文"),
     ("load_memories", "加载记忆"),
-    ("write_chapter", "撰写正文"),
+    ("scene_split", "拆分场景"),
+    ("write_scenes", "撰写场景"),
     ("consistency_check", "一致性检查"),
     ("save_chapter", "保存章节"),
     ("extract_memories", "提取记忆"),

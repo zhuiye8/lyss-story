@@ -1,4 +1,4 @@
-"""Extract structured memories from generated chapter content using LLM."""
+"""Extract structured memories + chapter summary from generated chapter content."""
 
 import json
 import logging
@@ -9,11 +9,12 @@ import aiosqlite
 
 from backend.llm.client import LLMClient
 from backend.memory.knowledge_graph import KnowledgeGraph
+from backend.storage.sqlite_store import SQLiteStore
 from backend.storage.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
-EXTRACTOR_SYSTEM_PROMPT = """你是小说记忆提取专家。你的任务是从小说章节内容中提取结构化的角色记忆和关系变化。
+EXTRACTOR_SYSTEM_PROMPT = """你是小说记忆提取专家。你的任务是从小说章节内容中提取结构化的角色记忆、关系变化，以及本章摘要、关键事件、未解伏笔。
 
 你必须输出严格的JSON格式：
 {
@@ -45,7 +46,12 @@ EXTRACTOR_SYSTEM_PROMPT = """你是小说记忆提取专家。你的任务是从
       "goals_update": "目标是否变化，如何变化",
       "status": "active/injured/captured/dead"
     }
-  ]
+  ],
+  "chapter_summary": {
+    "brief": "本章一段话梗概（100-150字，不要剧透下一章，只总结已发生）",
+    "key_events": ["事件1（不超过20字）", "事件2", "事件3"],
+    "unresolved_threads": ["本章埋的但未解的伏笔/未兑现的承诺（简洁一句话）", "..."]
+  }
 }
 
 提取规则：
@@ -53,7 +59,9 @@ EXTRACTOR_SYSTEM_PROMPT = """你是小说记忆提取专家。你的任务是从
 2. emotional_weight: 0.9-1.0=改变人生的大事, 0.7-0.8=重要发现/冲突, 0.4-0.6=日常事件, 0.1-0.3=琐碎细节
 3. visibility: witnessed=亲眼所见, heard=听说/被告知, inferred=推测/间接了解
 4. 关系变化要具体：不要只说"关系变化"，要说具体怎么变（如"从怀疑转为初步信任"）
-5. 每个角色提取2-5条记忆，不要遗漏关键事件"""
+5. 每个角色提取2-5条记忆，不要遗漏关键事件
+6. chapter_summary.brief 必须 100-150 字，按时间顺序概括
+7. unresolved_threads 只列**本章新埋下且尚未在本章解决**的伏笔、承诺、悬念"""
 
 
 def _build_extractor_prompt(
@@ -85,7 +93,20 @@ def _build_extractor_prompt(
 
 {chapter_content}
 
-请从以上章节中提取每个在场角色的记忆、关系变化和状态更新。"""
+请从以上章节中提取每个在场角色的记忆、关系变化、状态更新，以及本章摘要、关键事件、未解伏笔。"""
+
+
+def _extract_tail_snippet(chapter_content: str, max_chars: int = 300) -> str:
+    """Take the last ~max_chars of the chapter as a raw tail snippet for prompt continuity."""
+    content = chapter_content.strip()
+    if len(content) <= max_chars:
+        return content
+    # Try to cut at a paragraph boundary
+    tail = content[-max_chars:]
+    first_break = tail.find("\n")
+    if 0 < first_break < max_chars // 3:
+        tail = tail[first_break + 1 :]
+    return tail.strip()
 
 
 @dataclass
@@ -93,20 +114,25 @@ class ExtractionResult:
     character_memories: list[dict] = field(default_factory=list)
     relationship_changes: list[dict] = field(default_factory=list)
     character_states: list[dict] = field(default_factory=list)
+    chapter_summary: dict = field(default_factory=dict)
 
 
 class ChapterExtractor:
+    name = "extractor"
+
     def __init__(
         self,
         llm: LLMClient,
         vector_store: VectorStore,
         knowledge_graph: KnowledgeGraph,
         db_path: str,
+        sqlite_store: SQLiteStore | None = None,
     ):
         self.llm = llm
         self.vector = vector_store
         self.kg = knowledge_graph
         self.db_path = db_path
+        self.sqlite = sqlite_store
 
     async def extract_and_save(
         self,
@@ -115,8 +141,9 @@ class ChapterExtractor:
         chapter_content: str,
         character_profiles: list[dict],
         camera_decision: dict,
+        source_version_id: int | None = None,
     ) -> ExtractionResult:
-        """Extract memories from chapter content and save to stores."""
+        """Extract memories + summary from chapter content and save to stores."""
         # 1. Call LLM to extract structured data
         user_prompt = _build_extractor_prompt(
             chapter_content, chapter_num, character_profiles, camera_decision
@@ -126,7 +153,7 @@ class ChapterExtractor:
             extracted = await self.llm.complete_json(
                 system_prompt=EXTRACTOR_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
-                agent_name="extractor",
+                agent_name=self.name,
                 story_id=story_id,
                 chapter_num=chapter_num,
                 max_tokens=4096,
@@ -139,14 +166,15 @@ class ChapterExtractor:
             character_memories=extracted.get("character_memories", []),
             relationship_changes=extracted.get("relationship_changes", []),
             character_states=extracted.get("character_states", []),
+            chapter_summary=extracted.get("chapter_summary") or {},
         )
 
-        # 2. Save character memories to vector store
+        # 2. Save character memories to vector store (versioned)
         for i, mem in enumerate(result.character_memories):
             cid = mem.get("character_id", "")
             if not cid:
                 continue
-            memory_id = f"ch{chapter_num}_{cid}_{i}"
+            memory_id = f"ch{chapter_num}_v{source_version_id or 0}_{cid}_{i}"
             self.vector.add_memory(
                 story_id=story_id,
                 memory_id=memory_id,
@@ -160,9 +188,10 @@ class ChapterExtractor:
                     "location": mem.get("location", ""),
                     "visibility": mem.get("visibility", "witnessed"),
                 },
+                source_version_id=source_version_id,
             )
 
-        # 3. Save relationship changes to knowledge graph
+        # 3. Save relationship changes to knowledge graph (versioned)
         for rel in result.relationship_changes:
             subject = rel.get("subject", "")
             predicate = rel.get("predicate", "")
@@ -174,21 +203,21 @@ class ChapterExtractor:
             if change_type == "invalidate" or change_type == "weaken":
                 await self.kg.invalidate(story_id, subject, predicate, obj, chapter_num)
                 if change_type == "weaken":
-                    # Add weakened version
                     await self.kg.add_triple(
                         story_id, subject, f"{predicate}（减弱）", obj,
                         chapter_num, detail=rel.get("detail", ""),
                         source=f"ch{chapter_num}",
+                        source_version_id=source_version_id,
                     )
             else:
                 await self.kg.add_triple(
                     story_id, subject, predicate, obj,
                     chapter_num, detail=rel.get("detail", ""),
                     source=f"ch{chapter_num}",
+                    source_version_id=source_version_id,
                 )
 
-        # 4. Save character states
-        now = datetime.now(timezone.utc).isoformat()
+        # 4. Save character states (versioned)
         async with aiosqlite.connect(self.db_path) as db:
             for cs in result.character_states:
                 cid = cs.get("character_id", "")
@@ -196,11 +225,12 @@ class ChapterExtractor:
                     continue
                 await db.execute(
                     """INSERT OR REPLACE INTO character_states
-                       (story_id, character_id, chapter_num,
-                        emotional_state, knowledge_summary, goals_update, status, state_json)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                       (story_id, character_id, chapter_num, source_version_id,
+                        emotional_state, knowledge_summary, goals_update, status,
+                        state_json, is_active)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
                     (
-                        story_id, cid, chapter_num,
+                        story_id, cid, chapter_num, source_version_id or 0,
                         cs.get("emotional_state", ""),
                         cs.get("knowledge_summary", ""),
                         cs.get("goals_update", ""),
@@ -210,10 +240,30 @@ class ChapterExtractor:
                 )
             await db.commit()
 
+        # 5. Save chapter summary (Phase 3 - brief + key_events + unresolved_threads + tail)
+        if self.sqlite and result.chapter_summary:
+            try:
+                brief = str(result.chapter_summary.get("brief", "")).strip()
+                key_events = result.chapter_summary.get("key_events") or []
+                unresolved = result.chapter_summary.get("unresolved_threads") or []
+                tail = _extract_tail_snippet(chapter_content, max_chars=300)
+                await self.sqlite.save_chapter_summary(
+                    story_id=story_id,
+                    chapter_num=chapter_num,
+                    source_version_id=source_version_id or 0,
+                    brief=brief,
+                    key_events=[str(e) for e in key_events if e],
+                    unresolved_threads=[str(u) for u in unresolved if u],
+                    tail_snippet=tail,
+                )
+            except Exception as e:
+                logger.warning(f"[ChapterExtractor] Failed to save chapter summary: {e}")
+
         logger.info(
-            f"[ChapterExtractor] ch{chapter_num}: "
+            f"[ChapterExtractor] ch{chapter_num} v{source_version_id}: "
             f"{len(result.character_memories)} memories, "
             f"{len(result.relationship_changes)} rel changes, "
-            f"{len(result.character_states)} state updates"
+            f"{len(result.character_states)} state updates, "
+            f"summary={'yes' if result.chapter_summary else 'no'}"
         )
         return result

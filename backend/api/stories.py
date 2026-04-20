@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 
@@ -7,15 +8,19 @@ from pydantic import BaseModel
 from backend.config import Settings
 from backend.agents.outline_parser import OutlineParserAgent
 from backend.deps import (
-    get_chapter_extractor, get_json_store, get_knowledge_graph,
-    get_layered_memory, get_llm, get_plot_dedup, get_progress_store,
-    get_settings, get_sqlite, get_vector,
+    get_chapter_extractor, get_context_builder, get_json_store,
+    get_knowledge_graph, get_layered_memory, get_llm, get_plot_dedup,
+    get_progress_store, get_settings, get_sqlite, get_task_registry,
+    get_vector, get_world_book,
 )
+from backend.services.task_registry import TaskRegistry
 from backend.models.story_bible import extract_characters_from_bible
 from backend.memory.chapter_extractor import ChapterExtractor
+from backend.memory.context_builder import ContextBuilder
 from backend.memory.knowledge_graph import KnowledgeGraph
 from backend.memory.layered_memory import LayeredMemory
 from backend.memory.plot_dedup import PlotDedupStore
+from backend.memory.world_book import WorldBook
 from backend.progress import ProgressStore
 from backend.graph.chapter_graph import build_chapter_graph
 from backend.graph.init_graph import build_init_graph
@@ -31,6 +36,7 @@ class CreateStoryRequest(BaseModel):
     theme: str
     requirements: str = ""
     title: str = ""  # optional: user-specified book name
+    skip_init: bool = False  # True for import-outline mode (skip 4-agent pipeline)
 
 
 class GenerateRequest(BaseModel):
@@ -59,15 +65,20 @@ async def _run_init(
     sqlite: SQLiteStore,
     json_store: JSONStore,
     title: str = "",
+    world_book: WorldBook | None = None,
 ):
     """Background task: initialize a story."""
     try:
-        graph = build_init_graph(llm, title=title)
+        graph = build_init_graph(llm, title=title, world_book=world_book)
         compiled = graph.compile()
         result = await compiled.ainvoke({
             "story_id": story_id,
             "user_theme": theme,
             "user_requirements": requirements,
+            "concept": None,
+            "world_setting": None,
+            "characters_design": None,
+            "outline": None,
             "story_bible": None,
             "characters": [],
             "initial_world_state": None,
@@ -83,6 +94,10 @@ async def _run_init(
         json_store.save_event_graph(story_id, [])
         await sqlite.save_world_state(story_id, world_state, 0)
         await sqlite.update_story(story_id, title=bible.get("title", ""), status="bible_ready")
+    except asyncio.CancelledError:
+        logging.getLogger(__name__).warning(f"Init cancelled for {story_id}")
+        await sqlite.update_story(story_id, status="error: 用户已停止初始化")
+        raise
     except Exception as e:
         await sqlite.update_story(story_id, status=f"error: {str(e)[:200]}")
 
@@ -101,6 +116,7 @@ async def _run_chapter(
     human_feedback: str | None = None,
     plot_dedup: PlotDedupStore | None = None,
     word_count: int | None = None,
+    context_builder: ContextBuilder | None = None,
 ):
     """Background task: generate one chapter."""
     if progress_store:
@@ -110,7 +126,11 @@ async def _run_chapter(
         graph = build_chapter_graph(
             llm, sqlite, json_store, vector,
             progress_store, layered_memory, chapter_extractor,
-            plot_dedup,
+            plot_dedup, context_builder,
+            chapter_consistency_threshold=settings.chapter_consistency_threshold,
+            chapter_max_critical=settings.chapter_max_critical,
+            chapter_max_warnings=settings.chapter_max_warnings,
+            scene_consistency_threshold=settings.scene_consistency_threshold,
         )
         compiled = graph.compile()
 
@@ -132,11 +152,28 @@ async def _run_chapter(
             "target_word_count": word_count or settings.default_chapter_word_count,
             "max_retries": settings.max_consistency_retries,
             "memory_contexts": {},
+            "context_bundle": {},
+            "upstream_dependencies": [],
+            "scenes": [],
+            "current_scene_idx": 0,
+            "scene_contents": [],
+            "scene_retry_count": {},
+            "scene_consistency_results": [],
+            "scene_context_bundle": {},
+            "current_version_id": 0,
             "error_message": "",
             "human_feedback": human_feedback,
         })
 
         await sqlite.update_story(story_id, status="bible_ready")
+    except asyncio.CancelledError:
+        logging.getLogger(__name__).warning(
+            f"Chapter generation cancelled for {story_id} ch{chapter_num}"
+        )
+        if progress_store:
+            progress_store.set_error(story_id, "用户已停止")
+        await sqlite.update_story(story_id, status="bible_ready")
+        raise  # propagate cancellation
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
@@ -155,15 +192,26 @@ async def create_story(
     llm: LLMClient = Depends(get_llm),
     sqlite: SQLiteStore = Depends(get_sqlite),
     json_store: JSONStore = Depends(get_json_store),
+    world_book: WorldBook = Depends(get_world_book),
+    task_registry: TaskRegistry = Depends(get_task_registry),
 ):
     story_id = str(uuid.uuid4())[:8]
-    await sqlite.create_story(story_id, "", req.theme)
-    background.add_task(_run_init, story_id, req.theme, req.requirements, llm, sqlite, json_store, req.title)
+    await sqlite.create_story(story_id, req.title, req.theme)
+
+    if req.skip_init:
+        # Import-outline mode: just create record, don't run 4-agent pipeline
+        await sqlite.update_story(story_id, status="awaiting_outline")
+    else:
+        task = asyncio.create_task(
+            _run_init(story_id, req.theme, req.requirements, llm, sqlite, json_store, req.title, world_book)
+        )
+        task_registry.register(story_id, 0, task, kind="init")
+
     return StoryResponse(
         story_id=story_id,
-        title="",
+        title=req.title,
         theme=req.theme,
-        status="initializing",
+        status="awaiting_outline" if req.skip_init else "initializing",
         chapter_count=0,
     )
 
@@ -209,6 +257,63 @@ async def get_bible(story_id: str, json_store: JSONStore = Depends(get_json_stor
     return bible
 
 
+@router.put("/{story_id}/bible")
+async def update_bible(
+    story_id: str,
+    bible: dict,
+    sqlite: SQLiteStore = Depends(get_sqlite),
+    json_store: JSONStore = Depends(get_json_store),
+):
+    """Save edited story bible. Overwrites the entire bible JSON."""
+    story = await sqlite.get_story(story_id)
+    if not story:
+        raise HTTPException(404, "Story not found")
+
+    bible["bible_version"] = 2
+
+    # Update characters.json from bible
+    characters = extract_characters_from_bible(bible)
+    json_store.save_story_bible(story_id, bible)
+    json_store.save_characters(story_id, characters)
+
+    # Update story title if changed
+    if bible.get("title"):
+        await sqlite.update_story(story_id, title=bible["title"])
+
+    return {"message": "Story Bible updated", "title": bible.get("title", "")}
+
+
+@router.delete("/{story_id}")
+async def delete_story(
+    story_id: str,
+    sqlite: SQLiteStore = Depends(get_sqlite),
+    json_store: JSONStore = Depends(get_json_store),
+):
+    """Delete a story and all its data."""
+    story = await sqlite.get_story(story_id)
+    if not story:
+        raise HTTPException(404, "Story not found")
+
+    # Delete from SQLite
+    async with __import__("aiosqlite").connect(sqlite.db_path) as db:
+        await db.execute("DELETE FROM chapters WHERE story_id = ?", (story_id,))
+        await db.execute("DELETE FROM chapter_versions WHERE story_id = ?", (story_id,))
+        await db.execute("DELETE FROM world_states WHERE story_id = ?", (story_id,))
+        await db.execute("DELETE FROM character_states WHERE story_id = ?", (story_id,))
+        await db.execute("DELETE FROM character_arcs WHERE story_id = ?", (story_id,))
+        await db.execute("DELETE FROM knowledge_triples WHERE story_id = ?", (story_id,))
+        await db.execute("DELETE FROM stories WHERE id = ?", (story_id,))
+        await db.commit()
+
+    # Delete JSON files
+    import shutil
+    story_dir = json_store._story_dir(story_id)
+    if story_dir.exists():
+        shutil.rmtree(story_dir)
+
+    return {"message": f"Story {story_id} deleted"}
+
+
 @router.put("/{story_id}/publish")
 async def publish_story(
     story_id: str,
@@ -237,6 +342,8 @@ async def generate_chapter(
     layered_memory: LayeredMemory = Depends(get_layered_memory),
     chapter_extractor: ChapterExtractor = Depends(get_chapter_extractor),
     plot_dedup: PlotDedupStore = Depends(get_plot_dedup),
+    context_builder: ContextBuilder = Depends(get_context_builder),
+    task_registry: TaskRegistry = Depends(get_task_registry),
 ):
     story = await sqlite.get_story(story_id)
     if not story:
@@ -245,14 +352,20 @@ async def generate_chapter(
     if story["status"] not in ("bible_ready", "completed") and not story["status"].startswith("error"):
         raise HTTPException(400, f"Story is in state '{story['status']}', cannot generate")
 
+    if task_registry.is_running(story_id):
+        raise HTTPException(409, "该小说已有生成任务在运行，请先停止再重新开始")
+
     word_count = (req.word_count if req and req.word_count else None) or settings.default_chapter_word_count
 
     chapter_num = await sqlite.get_chapter_count(story_id) + 1
-    background.add_task(
-        _run_chapter, story_id, chapter_num, llm, settings, sqlite, json_store, vector,
-        progress_store, layered_memory, chapter_extractor,
-        None, plot_dedup, word_count,
+    task = asyncio.create_task(
+        _run_chapter(
+            story_id, chapter_num, llm, settings, sqlite, json_store, vector,
+            progress_store, layered_memory, chapter_extractor,
+            None, plot_dedup, word_count, context_builder,
+        )
     )
+    task_registry.register(story_id, chapter_num, task, kind="chapter")
     return {"message": f"Generating chapter {chapter_num}", "chapter_num": chapter_num, "word_count": word_count}
 
 
@@ -311,6 +424,28 @@ async def get_knowledge_graph_data(
     return {"nodes": nodes, "edges": edges}
 
 
+@router.get("/{story_id}/character-arcs/{character_id}")
+async def get_character_arc_history(
+    story_id: str,
+    character_id: str,
+    sqlite: SQLiteStore = Depends(get_sqlite),
+):
+    """Get character arc history + per-chapter emotional states."""
+    arcs = await sqlite.list_character_arcs(story_id, character_id)
+    # Also get per-chapter states
+    async with __import__("aiosqlite").connect(sqlite.db_path) as db:
+        db.row_factory = __import__("aiosqlite").Row
+        cursor = await db.execute(
+            """SELECT chapter_num, emotional_state, knowledge_summary, goals_update, status
+               FROM character_states
+               WHERE story_id = ? AND character_id = ?
+               ORDER BY chapter_num""",
+            (story_id, character_id),
+        )
+        states = [dict(row) for row in await cursor.fetchall()]
+    return {"arcs": arcs, "states": states}
+
+
 @router.get("/{story_id}/events")
 async def get_events(
     story_id: str,
@@ -332,21 +467,19 @@ async def _run_outline_import(
     sqlite: SQLiteStore,
     json_store: JSONStore,
 ):
-    """Background task: parse user outline into StoryBible V2."""
+    """Background task: parse user outline into StoryBible V2 using rule-based parser (no LLM)."""
     try:
         await sqlite.update_story(story_id, status="parsing_outline")
-        agent = OutlineParserAgent(llm)
+        agent = OutlineParserAgent(llm=llm)
         bible = await agent.run(raw_text=raw_text, title_hint=title, story_id=story_id)
 
         bible["bible_version"] = 2
 
-        # Extract characters for backward compat
+        # Extract characters from V2 structured fields
         characters = extract_characters_from_bible(bible)
-        bible["characters"] = characters
 
-        # Derive legacy top-level fields
+        # Ensure top-level shortcuts for downstream agents
         world = bible.get("world", {})
-        bible.setdefault("setting", world.get("world_background", ""))
         if not bible.get("world_rules"):
             bible["world_rules"] = world.get("world_rules", [])
         if not bible.get("power_system"):
@@ -378,6 +511,64 @@ async def _run_outline_import(
         tb = traceback.format_exc()
         logging.getLogger(__name__).error(f"Outline import failed: {tb}")
         await sqlite.update_story(story_id, status=f"error: {str(e)[:200]}")
+
+
+@router.get("/{story_id}/version-tree")
+async def get_version_tree(
+    story_id: str,
+    sqlite: SQLiteStore = Depends(get_sqlite),
+):
+    """Return the complete version+dependency graph for the version-tree page.
+
+    Shape:
+      {
+        chapters: [
+          {
+            chapter_num: int,
+            versions: [{id, version_num, title, word_count, is_live, feedback, created_at}]
+          }
+        ],
+        dependencies: [{chapter_num, version_id, depends_on_chapter, depends_on_version_id, dep_type}]
+      }
+    """
+    import aiosqlite
+    story = await sqlite.get_story(story_id)
+    if not story:
+        raise HTTPException(404, "Story not found")
+
+    async with aiosqlite.connect(sqlite.db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT id, chapter_num, version_num, title, pov,
+                      length(content) as word_count, feedback, is_live, created_at
+               FROM chapter_versions
+               WHERE story_id = ?
+               ORDER BY chapter_num, version_num""",
+            (story_id,),
+        )
+        version_rows = [dict(r) for r in await cur.fetchall()]
+
+        cur = await db.execute(
+            """SELECT chapter_num, source_version_id, depends_on_chapter,
+                      depends_on_version_id, dep_type
+               FROM chapter_dependencies
+               WHERE story_id = ?""",
+            (story_id,),
+        )
+        dep_rows = [dict(r) for r in await cur.fetchall()]
+
+    # Group by chapter_num
+    grouped: dict[int, dict] = {}
+    for v in version_rows:
+        cn = v["chapter_num"]
+        if cn not in grouped:
+            grouped[cn] = {"chapter_num": cn, "versions": []}
+        grouped[cn]["versions"].append(v)
+
+    return {
+        "chapters": [grouped[k] for k in sorted(grouped)],
+        "dependencies": dep_rows,
+    }
 
 
 @router.post("/{story_id}/import-outline")

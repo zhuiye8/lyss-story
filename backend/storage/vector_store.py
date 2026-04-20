@@ -1,6 +1,21 @@
 import chromadb
 
 
+def _normalize_meta(metadata: dict) -> dict:
+    """Ensure all metadata values are ChromaDB-compatible (str, int, float, bool)."""
+    clean = {}
+    for k, v in metadata.items():
+        if isinstance(v, list):
+            clean[k] = ",".join(str(x) for x in v)
+        elif isinstance(v, (str, int, float, bool)):
+            clean[k] = v
+        elif v is None:
+            clean[k] = ""
+        else:
+            clean[k] = str(v)
+    return clean
+
+
 class VectorStore:
     def __init__(self, chroma_path: str):
         self.client = chromadb.PersistentClient(path=chroma_path)
@@ -12,22 +27,49 @@ class VectorStore:
         )
 
     def add_memory(
-        self, story_id: str, memory_id: str, text: str, metadata: dict
+        self,
+        story_id: str,
+        memory_id: str,
+        text: str,
+        metadata: dict,
+        source_version_id: int | None = None,
     ) -> None:
-        # Ensure all metadata values are ChromaDB-compatible (str, int, float, bool)
-        clean_meta = {}
-        for k, v in metadata.items():
-            if isinstance(v, list):
-                clean_meta[k] = ",".join(str(x) for x in v)
-            elif isinstance(v, (str, int, float, bool)):
-                clean_meta[k] = v
-            else:
-                clean_meta[k] = str(v)
+        clean_meta = _normalize_meta(metadata)
+        clean_meta.setdefault("doc_type", "memory")
+        clean_meta.setdefault("is_active", True)
+        if source_version_id is not None:
+            clean_meta["source_version_id"] = int(source_version_id)
 
         collection = self.get_collection(story_id)
         collection.upsert(
             ids=[memory_id],
             documents=[text],
+            metadatas=[clean_meta],
+        )
+
+    def add_scene_text(
+        self,
+        story_id: str,
+        chapter_num: int,
+        scene_idx: int,
+        content: str,
+        metadata: dict,
+        source_version_id: int | None = None,
+    ) -> None:
+        """Store a scene's raw text for later semantic retrieval (Phase 4)."""
+        clean_meta = _normalize_meta(metadata)
+        clean_meta["doc_type"] = "scene_text"
+        clean_meta["chapter"] = chapter_num
+        clean_meta["scene_idx"] = scene_idx
+        clean_meta.setdefault("is_active", True)
+        if source_version_id is not None:
+            clean_meta["source_version_id"] = int(source_version_id)
+
+        scene_id = f"scene_ch{chapter_num}_s{scene_idx}_v{source_version_id or 0}"
+        collection = self.get_collection(story_id)
+        collection.upsert(
+            ids=[scene_id],
+            documents=[content],
             metadatas=[clean_meta],
         )
 
@@ -39,6 +81,8 @@ class VectorStore:
         category: str | None = None,
         n_results: int = 5,
         min_emotional_weight: float | None = None,
+        only_active: bool = True,
+        doc_type: str = "memory",
     ) -> list[dict]:
         collection = self.get_collection(story_id)
         kwargs: dict = {
@@ -46,8 +90,9 @@ class VectorStore:
             "n_results": n_results,
         }
 
-        # Build where filter
-        where_conditions = []
+        where_conditions = [{"doc_type": doc_type}]
+        if only_active:
+            where_conditions.append({"is_active": True})
         if character_id:
             where_conditions.append({"character_id": character_id})
         if category:
@@ -57,7 +102,7 @@ class VectorStore:
 
         if len(where_conditions) == 1:
             kwargs["where"] = where_conditions[0]
-        elif len(where_conditions) > 1:
+        else:
             kwargs["where"] = {"$and": where_conditions}
 
         try:
@@ -76,18 +121,40 @@ class VectorStore:
                 })
         return memories
 
+    def query_scene_texts(
+        self,
+        story_id: str,
+        query_text: str,
+        n_results: int = 3,
+        only_active: bool = True,
+    ) -> list[dict]:
+        """Query scene-level raw text chunks."""
+        return self.query_memories(
+            story_id=story_id,
+            query_text=query_text,
+            n_results=n_results,
+            only_active=only_active,
+            doc_type="scene_text",
+        )
+
     def query_by_emotional_weight(
         self,
         story_id: str,
         character_id: str,
         top_k: int = 10,
+        only_active: bool = True,
     ) -> list[dict]:
         """Get top-K memories ranked by emotional weight for L1 loading."""
         collection = self.get_collection(story_id)
         try:
-            # Get all memories for this character, then sort by emotional_weight
+            where: dict = {"$and": [
+                {"character_id": character_id},
+                {"doc_type": "memory"},
+            ]}
+            if only_active:
+                where["$and"].append({"is_active": True})
             results = collection.get(
-                where={"character_id": character_id},
+                where=where,
                 include=["documents", "metadatas"],
             )
         except Exception:
@@ -106,6 +173,75 @@ class VectorStore:
                 "emotional_weight": meta.get("emotional_weight", 0.5) if isinstance(meta.get("emotional_weight"), (int, float)) else 0.5,
             })
 
-        # Sort by emotional_weight descending
         memories.sort(key=lambda m: m["emotional_weight"], reverse=True)
         return memories[:top_k]
+
+    def _update_metadata(
+        self,
+        story_id: str,
+        where: dict,
+        updates: dict,
+    ) -> int:
+        """Bulk update metadata fields on matching docs. Returns count updated."""
+        collection = self.get_collection(story_id)
+        try:
+            found = collection.get(where=where, include=["metadatas", "documents"])
+        except Exception:
+            return 0
+        if not found or not found.get("ids"):
+            return 0
+
+        ids = found["ids"]
+        docs = found.get("documents") or [None] * len(ids)
+        metas = found.get("metadatas") or [{} for _ in ids]
+        new_metas = []
+        for m in metas:
+            merged = dict(m or {})
+            merged.update(updates)
+            new_metas.append(_normalize_meta(merged))
+        try:
+            collection.update(ids=ids, documents=docs, metadatas=new_metas)
+        except Exception:
+            # Some chroma versions reject documents=None; retry without
+            collection.update(ids=ids, metadatas=new_metas)
+        return len(ids)
+
+    def mark_memories_active(
+        self,
+        story_id: str,
+        chapter_num: int,
+        version_id: int,
+        active: bool,
+    ) -> int:
+        """Mark all memories tied to (chapter_num, version_id) as active or inactive."""
+        where = {"$and": [
+            {"chapter": chapter_num},
+            {"source_version_id": int(version_id)},
+        ]}
+        return self._update_metadata(story_id, where, {"is_active": active})
+
+    def mark_memories_by_version(
+        self,
+        story_id: str,
+        version_id: int,
+        active: bool,
+    ) -> int:
+        """Mark all memories from a specific version regardless of chapter."""
+        where = {"source_version_id": int(version_id)}
+        return self._update_metadata(story_id, where, {"is_active": active})
+
+    def delete_by_version(
+        self,
+        story_id: str,
+        version_id: int,
+    ) -> int:
+        """Hard delete all docs (memories + scenes) from a version."""
+        collection = self.get_collection(story_id)
+        try:
+            found = collection.get(where={"source_version_id": int(version_id)})
+            ids = found.get("ids") or []
+            if ids:
+                collection.delete(ids=ids)
+            return len(ids)
+        except Exception:
+            return 0

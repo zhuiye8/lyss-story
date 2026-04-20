@@ -49,6 +49,24 @@ export async function deleteModel(id: string): Promise<void> {
   await fetchJson(`${API_BASE}/admin/models/${id}`, { method: "DELETE" });
 }
 
+export interface ModelTestResult {
+  success: boolean;
+  model_id: string;
+  litellm_model: string;
+  response: string;
+  latency_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  message: string;
+  error?: string;
+}
+
+export async function testModel(modelId: string): Promise<ModelTestResult> {
+  return fetchJson(`${API_BASE}/admin/models/${modelId}/test`, {
+    method: "POST",
+  });
+}
+
 // --- Agent Bindings ---
 
 export interface AgentBinding {
@@ -162,4 +180,29 @@ export async function getUsage(
   days: number = 7,
 ): Promise<UsageResponse> {
   return fetchJson(`${API_BASE}/admin/usage?group_by=${groupBy}&days=${days}`);
+}
+
+// --- Generation Settings ---
+
+export interface GenerationSettings {
+  max_consistency_retries: number;
+  default_chapter_word_count: number;
+  chapter_consistency_threshold: number;
+  chapter_max_critical: number;
+  chapter_max_warnings: number;
+  scene_consistency_threshold: number;
+}
+
+export async function getGenerationSettings(): Promise<GenerationSettings> {
+  return fetchJson(`${API_BASE}/admin/settings`);
+}
+
+export async function updateGenerationSettings(
+  settings: Partial<GenerationSettings>
+): Promise<{ message: string; updated: Partial<GenerationSettings> }> {
+  return fetchJson(`${API_BASE}/admin/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
 }

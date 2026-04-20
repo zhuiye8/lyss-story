@@ -34,15 +34,29 @@ def build_user_prompt(
         {},
     )
 
+    # Extract special ability from bible
+    world = story_bible.get("world", {})
+    special_ability = world.get("special_ability") or {}
+    ability_text = ""
+    if special_ability.get("name"):
+        funcs = special_ability.get("functions", [])
+        ability_text = (
+            f"\n## 金手指：{special_ability['name']}\n"
+            f"{special_ability.get('description', '')}\n"
+            f"功能：{json.dumps(funcs, ensure_ascii=False)}\n"
+            f"注意：主角使用金手指时必须符合上述功能范围，不能凭空发明新能力。\n"
+        )
+
     prompt = f"""## 创作信息
 
 故事：《{story_bible.get('title', '')}》（{story_bible.get('genre', '')}）
 文风：{json.dumps(story_bible.get('style_guide', {}), ensure_ascii=False)}
 第{chapter_num}章
-
+{ability_text}
 ## 视角
 POV角色：{pov_char.get('name', '未知')}（{camera_decision.get('pov_type', '第三人称限知')}）
 性格：{pov_char.get('personality', '')}
+外貌：{pov_char.get('appearance', '')}
 节奏：{camera_decision.get('pacing', 'medium')}
 重点元素：{json.dumps(camera_decision.get('focus_elements', []), ensure_ascii=False)}
 

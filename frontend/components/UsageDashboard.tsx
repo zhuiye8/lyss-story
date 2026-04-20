@@ -1,6 +1,7 @@
 "use client";
 
 import type { UsageResponse } from "@/lib/admin-api";
+import { agentLabel } from "@/lib/agent-labels";
 
 interface Props {
   usage: UsageResponse | null;
@@ -40,7 +41,7 @@ export default function UsageDashboard({ usage }: Props) {
       <div className="space-y-3">
         {usage.stats.map((s) => (
           <div key={s.group_key} className="flex items-center gap-3">
-            <span className="w-24 text-sm font-medium text-right">{s.group_key}</span>
+            <span className="w-44 text-sm font-medium text-right truncate" title={s.group_key}>{agentLabel(s.group_key)}</span>
             <div className="flex-1 bg-gray-100 rounded-full h-6 relative">
               <div
                 className="bg-blue-500 h-6 rounded-full flex items-center justify-end pr-2"

@@ -5,9 +5,12 @@ from backend.llm.client import LLMClient
 from backend.llm.logger import LLMLogger
 from backend.llm.model_registry import ModelRegistry
 from backend.memory.chapter_extractor import ChapterExtractor
+from backend.memory.context_builder import ContextBuilder
 from backend.memory.knowledge_graph import KnowledgeGraph
 from backend.memory.layered_memory import LayeredMemory
 from backend.memory.plot_dedup import PlotDedupStore
+from backend.memory.world_book import WorldBook
+from backend.services.task_registry import TaskRegistry
 from backend.progress import ProgressStore
 from backend.storage.json_store import JSONStore
 from backend.storage.sqlite_store import SQLiteStore
@@ -60,3 +63,15 @@ def get_plot_dedup(request: Request) -> PlotDedupStore:
 
 def get_knowledge_graph(request: Request) -> KnowledgeGraph:
     return request.app.state.knowledge_graph
+
+
+def get_world_book(request: Request) -> WorldBook:
+    return request.app.state.world_book
+
+
+def get_context_builder(request: Request) -> ContextBuilder:
+    return request.app.state.context_builder
+
+
+def get_task_registry(request: Request) -> TaskRegistry:
+    return request.app.state.task_registry

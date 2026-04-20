@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
 
-# ====== V1 models (preserved for backward compatibility) ======
+# ====== Shared sub-models ======
 
 class WorldRule(BaseModel):
     rule_id: str
@@ -20,32 +20,6 @@ class StyleGuide(BaseModel):
     language_style: str = "现代白话"
     dialogue_style: str = "简洁有力"
 
-
-class ArcOutline(BaseModel):
-    name: str
-    chapter_start: int
-    chapter_end: int
-    goal: str
-    key_milestones: list[str] = Field(default_factory=list)
-
-
-class LongOutline(BaseModel):
-    target_chapters: int
-    arcs: list[ArcOutline] = Field(default_factory=list)
-
-
-class StoryBible(BaseModel):
-    """V1 StoryBible — kept for backward compat."""
-    title: str
-    genre: str
-    setting: str
-    world_rules: list[WorldRule] = Field(default_factory=list)
-    power_system: PowerSystem | None = None
-    style_guide: StyleGuide = Field(default_factory=StyleGuide)
-    taboos: list[str] = Field(default_factory=list)
-    initial_conflicts: list[str] = Field(default_factory=list)
-    planned_arc: str = ""
-    long_outline: LongOutline | None = None
 
 
 # ====== V2 models ======
@@ -85,6 +59,11 @@ class CharacterProfileV2(BaseModel):
     arc_plan: str = ""  # "起始→发展→终点" 人物弧线
     relationships: list[CharacterRelationship] = Field(default_factory=list)
     status: str = "active"
+    # Phase 5: hard voice constraints for long-form consistency
+    speech_examples: list[str] = Field(default_factory=list)    # 3-5 示例台词
+    speech_rules: list[str] = Field(default_factory=list)        # 说话规则
+    mannerisms: list[str] = Field(default_factory=list)          # 习惯动作/口头禅
+    hard_constraints: list[str] = Field(default_factory=list)    # 不可违反的设定底线
 
 
 class VolumeOutline(BaseModel):
@@ -140,12 +119,9 @@ class StoryBibleV2(BaseModel):
     planned_arc: str = ""
     volumes: list[VolumeOutline] = Field(default_factory=list)
 
-    # --- V1 兼容字段（下游 Agent 直接读这些 key） ---
-    setting: str = ""
+    # --- Top-level shortcuts (read by consistency/world prompts) ---
     world_rules: list[WorldRule] = Field(default_factory=list)
     power_system: PowerSystem | None = None
-    long_outline: LongOutline | None = None
-    characters: list[dict] = Field(default_factory=list)  # flat list for downstream
 
 
 def extract_characters_from_bible(bible: dict) -> list[dict]:

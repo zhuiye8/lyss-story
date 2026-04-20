@@ -3,15 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getLogs, getLogDetail, type LLMLogEntry, type LLMLogDetail } from "@/lib/admin-api";
-
-const AGENT_LABELS: Record<string, string> = {
-  director: "导演",
-  world: "世界引擎",
-  planner: "剧情规划",
-  camera: "摄影决策",
-  writer: "写作",
-  consistency: "一致性检查",
-};
+import { AGENT_LABELS, ALL_AGENT_KEYS, agentLabel } from "@/lib/agent-labels";
 
 export default function LogsPage() {
   const [logs, setLogs] = useState<LLMLogEntry[]>([]);
@@ -55,8 +47,8 @@ export default function LogsPage() {
           className="p-2 border rounded text-sm"
         >
           <option value="">全部Agent</option>
-          {Object.entries(AGENT_LABELS).map(([key, label]) => (
-            <option key={key} value={key}>{label} ({key})</option>
+          {ALL_AGENT_KEYS.map((key) => (
+            <option key={key} value={key}>{agentLabel(key)}</option>
           ))}
         </select>
       </div>
@@ -76,8 +68,8 @@ export default function LogsPage() {
                   #{log.id}
                 </span>
                 <span className={`w-3 h-3 rounded-full ${log.status === "success" ? "bg-green-500" : "bg-red-500"}`} />
-                <span className="w-24 font-medium">
-                  {AGENT_LABELS[log.agent_name] || log.agent_name}
+                <span className="w-40 font-medium truncate" title={log.agent_name}>
+                  {agentLabel(log.agent_name)}
                 </span>
                 <span className="w-32 text-gray-500 text-xs">{log.litellm_model}</span>
                 <span className="w-20 text-xs">

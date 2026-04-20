@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { ModelConfig } from "@/lib/admin-api";
+import type { ModelConfig, ModelTestResult } from "@/lib/admin-api";
+import { testModel } from "@/lib/admin-api";
 
 interface Props {
   models: ModelConfig[];
@@ -115,6 +116,8 @@ const EMPTY_MODEL: ModelConfig = {
 export default function ModelConfigPanel({ models, onSave, onDelete }: Props) {
   const [editing, setEditing] = useState<ModelConfig | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<ModelTestResult | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -243,20 +246,87 @@ export default function ModelConfigPanel({ models, onSave, onDelete }: Props) {
 
       <div className="space-y-2">
         {models.map((m) => (
-          <div key={m.id} className="flex items-center justify-between p-3 border rounded-lg">
-            <div>
-              <span className="font-medium">{m.display_name}</span>
-              <span className="ml-2 text-sm text-gray-500">{m.litellm_model}</span>
-              <span className={`ml-2 text-xs px-2 py-0.5 rounded ${m.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                {m.is_active ? "启用" : "禁用"}
-              </span>
+          <div key={m.id} className="p-3 border rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="font-medium">{m.display_name}</span>
+                <span className="ml-2 text-sm text-gray-500">{m.litellm_model}</span>
+                <span className={`ml-2 text-xs px-2 py-0.5 rounded ${m.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                  {m.is_active ? "启用" : "禁用"}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    setTesting(m.id);
+                    setTestResult(null);
+                    try {
+                      const result = await testModel(m.id);
+                      setTestResult(result);
+                    } catch (e) {
+                      setTestResult({
+                        success: false,
+                        model_id: m.id,
+                        litellm_model: m.litellm_model,
+                        response: "",
+                        latency_ms: 0,
+                        input_tokens: 0,
+                        output_tokens: 0,
+                        message: `请求失败：${(e as Error).message}`,
+                      });
+                    } finally {
+                      setTesting(null);
+                    }
+                  }}
+                  disabled={testing === m.id}
+                  className={`text-sm px-2 py-1 rounded transition ${
+                    testing === m.id
+                      ? "bg-gray-200 text-gray-500 cursor-wait"
+                      : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+                  }`}
+                >
+                  {testing === m.id ? "测试中..." : "测试"}
+                </button>
+                <button onClick={() => { setEditing({ ...m }); setShowForm(true); }}
+                  className="text-sm text-blue-600 hover:underline">编辑</button>
+                <button onClick={() => onDelete(m.id)}
+                  className="text-sm text-red-600 hover:underline">删除</button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => { setEditing({ ...m }); setShowForm(true); }}
-                className="text-sm text-blue-600 hover:underline">编辑</button>
-              <button onClick={() => onDelete(m.id)}
-                className="text-sm text-red-600 hover:underline">删除</button>
-            </div>
+            {testResult && testResult.model_id === m.id && (
+              <div className={`mt-2 p-3 rounded text-sm ${
+                testResult.success
+                  ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                  : "bg-red-50 border border-red-200 text-red-800"
+              }`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`inline-block w-2 h-2 rounded-full ${
+                    testResult.success ? "bg-emerald-500" : "bg-red-500"
+                  }`} />
+                  <span className="font-medium">
+                    {testResult.success ? "连接成功" : "连接失败"}
+                  </span>
+                  {testResult.latency_ms > 0 && (
+                    <span className="text-xs opacity-70">{testResult.latency_ms}ms</span>
+                  )}
+                </div>
+                {testResult.response && (
+                  <div className="text-xs opacity-80 mt-1">
+                    回复：{testResult.response}
+                  </div>
+                )}
+                {testResult.input_tokens > 0 && (
+                  <div className="text-xs opacity-60 mt-1">
+                    Token 用量：输入 {testResult.input_tokens} · 输出 {testResult.output_tokens}
+                  </div>
+                )}
+                {!testResult.success && testResult.error && (
+                  <div className="text-xs mt-1 break-all">
+                    错误：{testResult.error}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
         {models.length === 0 && (
